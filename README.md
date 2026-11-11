@@ -29,27 +29,43 @@ OOS 是一套自研操作系统的**设计规范文档集**，以「对象‑条
 | 对象与格式 | `dllo.md`、`exeo.md`、`tpmeo.md`、`lerf.md`、`tmmf.md` |
 | 兼容层与电源 | `Linux.md`、`power.md` |
 
-共 **59 份**规范文档。
+共 **59 份**规范文档，全部位于 [`docs/`](docs/)。真实代码位于 [`src/`](src/)。
+
+## 仓库结构
+
+```
+.
+├─ docs/                  59 份设计规范
+├─ src/                   实现代码（v0 阶段仅结构说明）
+├─ LICENSE                MPL 2.0 全文
+├─ README.md              项目说明
+└─ RELEASE_NOTES_v0.md    v0 发布公告
+```
 
 ## 阅读顺序
 
-1. `os.md` — 架构总纲与混合内核三层归属
-2. `objmgr.md` — 全局内核对象管理器
-3. `.api.md` — 对象条目与接口契约模型
-4. `kernel.md`、`boot.md` — 内核镜像、内核扩展文件与启动流程
-5. `process.md`、`memory.md`、`cpu.md`、`ipc.md` — 执行与通信基础
-6. `fs.md`、`storage.md`、`filemgr.md` — 存储与文件
-7. `security.md`、`acl.md`、`auth.md`、`account.md` — 安全、权限与账户
-8. `ui.md`、`uio.md`、`font.md` — 图形界面
+1. [`docs/os.md`](docs/os.md) — 架构总纲与混合内核三层归属
+2. [`docs/objmgr.md`](docs/objmgr.md) — 全局内核对象管理器
+3. [`docs/.api.md`](docs/.api.md) — 对象条目与接口契约模型
+4. [`docs/kernel.md`](docs/kernel.md)、[`docs/boot.md`](docs/boot.md) — 内核镜像、内核扩展文件与启动流程
+5. [`docs/process.md`](docs/process.md)、[`docs/memory.md`](docs/memory.md)、[`docs/cpu.md`](docs/cpu.md)、[`docs/ipc.md`](docs/ipc.md) — 执行与通信基础
+6. [`docs/fs.md`](docs/fs.md)、[`docs/storage.md`](docs/storage.md)、[`docs/filemgr.md`](docs/filemgr.md) — 存储与文件
+7. [`docs/security.md`](docs/security.md)、[`docs/acl.md`](docs/acl.md)、[`docs/auth.md`](docs/auth.md)、[`docs/account.md`](docs/account.md) — 安全、权限与账户
+8. [`docs/ui.md`](docs/ui.md)、[`docs/uio.md`](docs/uio.md)、[`docs/font.md`](docs/font.md) — 图形界面
 9. 其余子系统与应用文档按需查阅
 
 ## 版本
 
 - **v0**：首个规范版本，完整覆盖架构、内核、执行、存储、安全、界面、应用与格式，共 59 份文档。
 
-## 许可
-
-暂未指定开源许可证；在明确之前，保留所有权利。
+## 许可
+
+本项目采用 **Mozilla Public License 2.0（MPL 2.0）**，全文见 [`LICENSE`](LICENSE)。
+
+- **文件级传染**：修改本项目任何源文件并以源码形式分发时，被修改的文件必须以 MPL 2.0 公开。
+- **不传染上层代码**：把本项目与专有代码组合成更大作品（Larger Work）不受限制，无需公开你自己的上层代码。
+- 分发二进制时，须以 MPL 2.0 提供对应源文件，并告知获取方式。
+- 未修改的文件可继续按原许可使用；专利授权随 MPL 2.0 一并授予。
 
 ## 贡献
 
