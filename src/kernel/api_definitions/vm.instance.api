@@ -1,0 +1,25 @@
+{
+  "name": "vm.instance",
+  "version": 1,
+  "internal_path": "/object/vm",
+  "read_fields": [
+    {"name": "name", "field_type": "string", "internal_mapping": "props.name", "readable": true, "writable": false},
+    {"name": "state", "field_type": "u8", "internal_mapping": "props.state", "readable": true, "writable": false},
+    {"name": "vcpu_count", "field_type": "u32", "internal_mapping": "config.vcpu_count", "readable": true, "writable": false},
+    {"name": "memory_mb", "field_type": "u32", "internal_mapping": "config.memory_mb", "readable": true, "writable": false},
+    {"name": "vcpu_weight", "field_type": "u32", "internal_mapping": "config.vcpu_weight", "readable": true, "writable": false},
+    {"name": "passthrough_devices", "field_type": "array", "internal_mapping": "props.passthrough", "readable": true, "writable": false},
+    {"name": "tap_interface", "field_type": "string", "internal_mapping": "props.tap", "readable": true, "writable": false}
+  ],
+  "write_fields": [
+    {"name": "start", "field_type": "command", "internal_mapping": "ctl.start", "readable": false, "writable": true},
+    {"name": "pause", "field_type": "command", "internal_mapping": "ctl.pause", "readable": false, "writable": true},
+    {"name": "stop", "field_type": "command", "internal_mapping": "ctl.stop", "readable": false, "writable": true},
+    {"name": "reset", "field_type": "command", "internal_mapping": "ctl.reset", "readable": false, "writable": true},
+    {"name": "snapshot", "field_type": "command", "internal_mapping": "ctl.snapshot", "readable": false, "writable": true},
+    {"name": "add_passthrough", "field_type": "command", "internal_mapping": "ctl.add_passthrough", "readable": false, "writable": true},
+    {"name": "attach_tap", "field_type": "command", "internal_mapping": "ctl.attach_tap", "readable": false, "writable": true}
+  ],
+  "rate_limit": {"max_calls_per_sec": 100},
+  "audit": true
+}

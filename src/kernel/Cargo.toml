@@ -1,0 +1,40 @@
+[package]
+name = "hybrid_kernel"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["staticlib"]
+path = "src/kernel/main.rs"
+
+[dependencies]
+# 硬件底层封装
+x86_64 = "0.15.0"
+
+# 内存底座（供给所有需要alloc的库）
+buddy-alloc = "0.6.0"
+
+# SMP同步原语底座
+spin = { version = "0.9.8", features = ["mutex", "rwlock", "once"] }
+
+# 容器工具
+hashbrown = { version = "0.14.5", default-features = false, features = ["alloc", "ahash", "inline-more"] }
+
+# 通用工具
+bitflags = "1.3.2"
+
+# 序列化解析，用于.api契约、配置解析
+serde = { version = "1.0", default-features = false, features = ["derive", "alloc"] }
+serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
+
+# 时间抽象（底层TSC/APIC读取代码自己写粘合层）
+embedded-time = "0.12.1"
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
+opt-level = 3
+debug = false
+strip = true

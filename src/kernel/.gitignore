@@ -1,0 +1,8 @@
+# 构建产物
+target/
+build/
+*.iso
+*.efi
+*.o
+*.a
+*.log

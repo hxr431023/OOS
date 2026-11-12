@@ -1,0 +1,17 @@
+[package]
+name = "hybrid-bootloader"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "bootloader"
+path = "src/main.rs"
+
+[dependencies]
+uefi = { version = "0.26", features = ["alloc"] }
+uefi-services = "0.23"
+uefi-raw = "0.5"
+
+[profile.release]
+opt-level = 3
+panic = "abort"

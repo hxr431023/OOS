@@ -1,0 +1,22 @@
+{
+  "name": "net.socket",
+  "version": 1,
+  "internal_path": "/object/net/sock",
+  "read_fields": [
+    {"name": "local_port", "field_type": "u16", "internal_mapping": "status.local_port", "readable": true, "writable": false},
+    {"name": "remote_port", "field_type": "u16", "internal_mapping": "status.remote_port", "readable": true, "writable": false},
+    {"name": "local_addr", "field_type": "u32", "internal_mapping": "status.local_addr", "readable": true, "writable": false},
+    {"name": "remote_addr", "field_type": "u32", "internal_mapping": "status.remote_addr", "readable": true, "writable": false},
+    {"name": "state", "field_type": "u8", "internal_mapping": "status.state", "readable": true, "writable": false},
+    {"name": "rx_bytes", "field_type": "u64", "internal_mapping": "stats.rx_bytes", "readable": true, "writable": false},
+    {"name": "tx_bytes", "field_type": "u64", "internal_mapping": "stats.tx_bytes", "readable": true, "writable": false}
+  ],
+  "write_fields": [
+    {"name": "connect", "field_type": "command", "internal_mapping": "ctl.connect", "readable": false, "writable": true},
+    {"name": "listen", "field_type": "command", "internal_mapping": "ctl.listen", "readable": false, "writable": true},
+    {"name": "close", "field_type": "command", "internal_mapping": "ctl.close", "readable": false, "writable": true},
+    {"name": "bind", "field_type": "command", "internal_mapping": "ctl.bind", "readable": false, "writable": true}
+  ],
+  "rate_limit": {"max_calls_per_sec": 10000},
+  "audit": true
+}
