@@ -151,9 +151,9 @@ PASS（used 个位数、口径正确）。
 | 编号 | 状态 | 说明 |
 |---|---|---|
 | D5 | PASS | `KEntry.waiters` 改为 `ipc::WaitQueue`；新增 `wake_all()`/`len()`；写入后唤醒并打印 `[ipc] woke N waiter(s)`，不再 pop 丢弃 |
-| D6 | 部分 | 已删除 `GlueStatus` 假数据（无后端返回 ENOENT、DoWork 返回 EINVAL）；`.api` 解析器/加载未实现，详见 `API_CONTRACT_STATUS.md` |
-| D7 | 待办 | 仍只有 `WaitQueue`，缺 MQ / event / 字节流 IO-IPC |
-| D8 | 待办 | `_syscall_entry` 未换栈、无 `swapgs` |
+| D6 | PASS | 新增 `api_parser.rs`，按实际 JSON 格式解析并加载 4 份契约；删除 `GlueStatus` 假数据（无后端返回 ENOENT）；串口 `[api] loaded 4 contract(s), 4 object(s), 48 entry(s), 0 failed` |
+| D7 | PASS | 实现 `MessageQueue`（send/recv/peek/close，满返回 EAGAIN）与 `Event`（set/reset/wait/pulse），注册 `/object/ipc/mq`、`/object/ipc/event`；字节流 IO-IPC 明确标记 pending；串口 `[ipctest] PASS` |
+| D8 | PASS | `_syscall_entry` 增加 `swapgs`、保存用户 rsp 到 `gs:0x8`、切到 per-CPU 内核栈；新增 IA32_GS_BASE 初始化与 GS 自检；串口 `[syscall] stack switch ok, gs initialized on 1 cpu(s)` |
 | D9/D10 | PASS | 2MB 大页覆盖 `__kernel_end + 8MB`；`unmap` 实现定位/清零/invlpg/返回物理地址，大页返回 EINVAL |
 | D11 | PASS | 对齐起始 + `FreeBlock` 最小块尺寸、归属校验 panic、有序插入 + 相邻合并、`heap_stats()`；修复后启动正常 |
 | D12 | PASS | 删除 `KObject.refcnt`；移除未用的 `buddy-alloc`、`embedded-time`；`x86_64` 实际在用（ata/apic/pci）故保留；`src/asm/` 非空（boot_entry.s、syscall_stub.s），按要求保留 |
@@ -194,3 +194,25 @@ root@hybrid:~#
 - 已消除全部 `#![no_std]` 冗余、asm 语法行、未用 import；新增 crate 级 `#![allow(unsafe_op_in_unsafe_fn)]`（edition 2024 下大量 unsafe fn 内操作，非 dead_code/unused 掩盖）。
 - 剩余约 167 条 warning，集中在各子系统预留 API 的 dead_code（`net/` 32、`font/cff.rs` 13、`user.rs` 11、`ui/` 9、`vm/` 8 等）。
 - 任务书禁止 `#[allow(dead_code)]`，需按“删除或接线”逐项处理，尚未完成。
+
+### D6 证据（`build/serial119.log`）
+```
+[api] loaded 4 contract(s), 4 object(s), 48 entry(s), 0 failed
+.api bridge ready, contracts loaded
+```
+
+### D7 证据
+```
+[ipc] mq+event ready, byte-stream IO-IPC pending (docs/ipc.md byte-stream)
+[ipctest] PASS
+```
+
+### D8 证据
+```
+[syscall] stack switch ok, gs initialized on 1 cpu(s)
+[syscall] self-test begin ... done
+```
+
+### git
+- 本地已 `git init` 并提交：`a09e1c3 fix(D1-D13): 按任务书修复内核缺陷`
+- 远程 `https://github.com/hxr431023/OOS.git` 推送失败：`Connection was reset`（网络无法访问 GitHub），需代理/VPN 后重试。

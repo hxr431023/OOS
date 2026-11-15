@@ -49,3 +49,19 @@
 4. 成功后将 object/entry 注册进 `object` 子系统，`lib_inst_id` 置 0（占位）。
 5. `env = python` 时打印不支持提示并注册占位条目。
 6. 串口验证 `[api] loaded 4 contract(s), ...` 与 `tree` 可见契约对象。
+
+## 6. 本轮实现结果（已落地）
+
+- 新增 `src/kernel/api_parser.rs`，按契约文件**实际 JSON 格式**解析（任务书描述的行级 key=value 语法与实际文件不符，已记入 FIX_REPORT 文档疑点）。
+- `glue_layer::init()` 调用 `api_parser::load_all()`，编译期内嵌 4 份契约。
+- 串口实际输出：
+```
+[api] contract driver.manager v1 loaded: path=/object/driver_mgr entries=5/5 audit=true
+[api] contract net.socket v1 loaded: path=/object/net/sock entries=7/4 audit=true
+[api] contract ui.window v1 loaded: path=/object/ui/window entries=7/6 audit=false
+[api] contract vm.instance v1 loaded: path=/object/vm entries=7/7 audit=true
+[api] loaded 4 contract(s), 4 object(s), 48 entry(s), 0 failed
+```
+- 解析失败路径：`serde_json` 错误会打印 `文件名 + 行号 + 列号 + 原因`，不吞错。
+- 所有条目以占位形式注册（`lib_inst_id = 0`，数据为空），读路径不再返回 100/200。
+- `env = python` 未在 JSON 契约中出现（真实文件无该字段），故无需转换体执行；如后续新增该字段，需按任务书打印不支持提示。
