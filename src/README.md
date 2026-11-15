@@ -20,7 +20,7 @@
 | `kernel/src/kernel/font/` | CFF 字体解析；`assets/hybrid.cfont` 为内置字体资源 |
 | `kernel/src/asm/` | 启动入口与 syscall 桩（汇编） |
 | `kernel/src/user/` | 用户态库与 init 程序 |
-| `kernel/bootloader/` | UEFI bootloader（Rust，源码） |
+| `kernel/system/bootloader/` | UEFI bootloader（Rust，源码） |
 | `kernel/netstack/` | Go 参考网络栈（方案 C，保留） |
 | `kernel/api_definitions/` | `.api` 契约文件（driver.manager、net.socket、ui.window、vm.instance） |
 | `kernel/Cargo.toml`、`linker.ld`、`Makefile`、`build.ps1` | 工程与构建配置 |
