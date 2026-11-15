@@ -1,0 +1,21 @@
+{
+  "name": "driver.manager",
+  "version": 1,
+  "internal_path": "/object/driver_mgr",
+  "read_fields": [
+    {"name": "driver_name", "field_type": "string", "internal_mapping": "info.name", "readable": true, "writable": false},
+    {"name": "pid", "field_type": "u64", "internal_mapping": "info.pid", "readable": true, "writable": false},
+    {"name": "state", "field_type": "u8", "internal_mapping": "info.state", "readable": true, "writable": false},
+    {"name": "bound_device", "field_type": "string", "internal_mapping": "info.bound_device", "readable": true, "writable": false},
+    {"name": "supported_devices", "field_type": "array", "internal_mapping": "info.supported", "readable": true, "writable": false}
+  ],
+  "write_fields": [
+    {"name": "register", "field_type": "command", "internal_mapping": "ctl.register", "readable": false, "writable": true},
+    {"name": "unregister", "field_type": "command", "internal_mapping": "ctl.unregister", "readable": false, "writable": true},
+    {"name": "bind_device", "field_type": "command", "internal_mapping": "ctl.bind", "readable": false, "writable": true},
+    {"name": "unbind_device", "field_type": "command", "internal_mapping": "ctl.unbind", "readable": false, "writable": true},
+    {"name": "reset_device", "field_type": "command", "internal_mapping": "ctl.reset", "readable": false, "writable": true}
+  ],
+  "rate_limit": {"max_calls_per_sec": 50},
+  "audit": true
+}

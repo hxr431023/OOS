@@ -1,0 +1,21 @@
+﻿cargo :    Compiling proc-macro2 v1.0.107
+At line:1 char:13929
++ ... bootloader; cargo build --release --target x86_64-unknown-uefi > buil ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (   Compiling proc-macro2 v1.0.107:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+   Compiling uguid v2.2.1
+   Compiling bitflags v2.13.1
+   Compiling bit_field v0.10.3
+   Compiling log v0.4.34
+   Compiling cfg-if v1.0.4
+error: failed to run custom build command for `proc-macro2 v1.0.107`
+
+Caused by:
+  could not execute process `C:\wpjc\os\rust.s\bootloader\target\release\build\proc-macro2-0a08dce2c1233629\build-scrip
+t-build` (never executed)
+
+Caused by:
+  拒绝访问。 (os error 5)
+warning: build failed, waiting for other jobs to finish...
