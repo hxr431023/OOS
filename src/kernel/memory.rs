@@ -150,6 +150,15 @@ pub fn kernel_end_addr() -> usize {
     core::ptr::addr_of!(__kernel_end) as usize
 }
 
+/// D2 修订：内核维护的 free ranges（(start,end)）
+pub const MAX_FREE_RANGES: usize = 32;
+static mut FREE_RANGES: [(usize, usize); MAX_FREE_RANGES] = [(0, 0); MAX_FREE_RANGES];
+static mut FREE_RANGE_COUNT: usize = 0;
+
+pub fn free_ranges() -> &'static [(usize, usize)] {
+    unsafe { &FREE_RANGES[..FREE_RANGE_COUNT] }
+}
+
 /// 当前可分配物理内存区间 [start, end)
 pub fn phys_range() -> (usize, usize) {
     unsafe { (PHYS_START, PHYS_END) }
@@ -184,13 +193,39 @@ pub fn mem_stats() -> MemStats {
     }
 }
 
-pub fn init(map: &UefiMemoryMap) {
+pub fn init(map: &UefiMemoryMap, descs: &[(u64, u64, u32)]) {
     unsafe {
         // D1：把内核镜像自身物理区间从可分配内存中排除，避免页分配器落进内核堆/栈
         let kend = kernel_end_addr();
         let reserve_end = (kend + 0xFFF) & !0xFFF;
-        PHYS_START = core::cmp::max((map.ram_start as usize) & !0xFFF, reserve_end);
-        PHYS_END = map.ram_end as usize;
+        // D2 修订：按描述符数组建 free ranges；跳过非 CONVENTIONAL 与 MMIO
+        FREE_RANGE_COUNT = 0;
+        for &(b, l, t) in descs {
+            // 7 = CONVENTIONAL；MMIO/reserved 等一律跳过
+            if t != 7 { continue; }
+            if l == 0 { continue; }
+            if b < 0x100000 { continue; }
+            let mut st = ((b as usize) + 0xFFF) & !0xFFF;
+            let en = ((b.saturating_add(l)) as usize) & !0xFFF;
+            if en <= st { continue; }
+            if st < reserve_end { st = reserve_end; }
+            // 0x800000 页为 bootloader 通信页，列为保留
+            if st <= 0x800000 && en > 0x800000 {
+                st = 0x801000;
+            }
+            if st >= en { continue; }
+            if FREE_RANGE_COUNT < MAX_FREE_RANGES {
+                FREE_RANGES[FREE_RANGE_COUNT] = (st, en);
+                FREE_RANGE_COUNT += 1;
+            }
+        }
+        if FREE_RANGE_COUNT > 0 {
+            PHYS_START = FREE_RANGES[0].0;
+            PHYS_END = FREE_RANGES[FREE_RANGE_COUNT - 1].1;
+        } else {
+            PHYS_START = 0;
+            PHYS_END = 0;
+        }
         // 保存 GOP framebuffer 信息（base=0 表示无 GOP，显示层回退 0xB8000）
         FB_INFO = FrameBufferInfo {
             base: map.fb_base,

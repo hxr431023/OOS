@@ -1,25 +1,83 @@
-# driver.manager 对外接口契约（片段格式）
-version = 1.0
-target = driver.manager
-env = rust
-exec = /system/kernel/driver
-internal_loc = map + symbol + register
-min_os_version = 1.0
-global_acl = kernel
-global_limit = 50次/秒
-
-object /object/driver_mgr driver_manager
-
-# ---- 只读条目 ----
-driver_manager: driver_name { } /object/driver_mgr/info/name
-driver_manager: pid { } /object/driver_mgr/info/pid
-driver_manager: state { } /object/driver_mgr/info/state
-driver_manager: bound_device { } /object/driver_mgr/info/bound_device
-driver_manager: supported_devices { } /object/driver_mgr/info/supported
-
-# ---- 可写控制条目 ----
-driver_manager: register { self.write_register() } /object/driver_mgr/ctl/register
-driver_manager: unregister { self.write_unregister() } /object/driver_mgr/ctl/unregister
-driver_manager: bind_device { self.write_bind_device() } /object/driver_mgr/ctl/bind
-driver_manager: unbind_device { self.write_unbind_device() } /object/driver_mgr/ctl/unbind
-driver_manager: reset_device { self.write_reset_device() } /object/driver_mgr/ctl/reset
+{
+  "name": "driver.manager",
+  "version": 1,
+  "internal_path": "/object/driver_mgr",
+  "read_fields": [
+    {
+      "name": "driver_name",
+      "field_type": "string",
+      "internal_mapping": "info.name",
+      "readable": true,
+      "writable": false
+    },
+    {
+      "name": "pid",
+      "field_type": "u64",
+      "internal_mapping": "info.pid",
+      "readable": true,
+      "writable": false
+    },
+    {
+      "name": "state",
+      "field_type": "u8",
+      "internal_mapping": "info.state",
+      "readable": true,
+      "writable": false
+    },
+    {
+      "name": "bound_device",
+      "field_type": "string",
+      "internal_mapping": "info.bound_device",
+      "readable": true,
+      "writable": false
+    },
+    {
+      "name": "supported_devices",
+      "field_type": "array",
+      "internal_mapping": "info.supported",
+      "readable": true,
+      "writable": false
+    }
+  ],
+  "write_fields": [
+    {
+      "name": "register",
+      "field_type": "command",
+      "internal_mapping": "ctl.register",
+      "readable": false,
+      "writable": true
+    },
+    {
+      "name": "unregister",
+      "field_type": "command",
+      "internal_mapping": "ctl.unregister",
+      "readable": false,
+      "writable": true
+    },
+    {
+      "name": "bind_device",
+      "field_type": "command",
+      "internal_mapping": "ctl.bind",
+      "readable": false,
+      "writable": true
+    },
+    {
+      "name": "unbind_device",
+      "field_type": "command",
+      "internal_mapping": "ctl.unbind",
+      "readable": false,
+      "writable": true
+    },
+    {
+      "name": "reset_device",
+      "field_type": "command",
+      "internal_mapping": "ctl.reset",
+      "readable": false,
+      "writable": true
+    }
+  ],
+  "rate_limit": {
+    "max_calls_per_sec": 50
+  },
+  "audit": true
+}

@@ -1,29 +1,111 @@
-# vm.instance 对外接口契约（片段格式）
-version = 1.0
-target = vm.instance
-env = rust
-exec = /system/kernel/vm
-internal_loc = map + symbol + register
-min_os_version = 1.0
-global_acl = kernel
-global_limit = 100次/秒
-
-object /object/vm vm_instance
-
-# ---- 只读条目 ----
-vm_instance: name { } /object/vm/props/name
-vm_instance: state { } /object/vm/props/state
-vm_instance: vcpu_count { } /object/vm/config/vcpu_count
-vm_instance: memory_mb { } /object/vm/config/memory_mb
-vm_instance: vcpu_weight { } /object/vm/config/vcpu_weight
-vm_instance: passthrough_devices { } /object/vm/props/passthrough
-vm_instance: tap_interface { } /object/vm/props/tap
-
-# ---- 可写控制条目 ----
-vm_instance: start { self.write_start() } /object/vm/ctl/start
-vm_instance: pause { self.write_pause() } /object/vm/ctl/pause
-vm_instance: stop { self.write_stop() } /object/vm/ctl/stop
-vm_instance: reset { self.write_reset() } /object/vm/ctl/reset
-vm_instance: snapshot { self.write_snapshot() } /object/vm/ctl/snapshot
-vm_instance: add_passthrough { self.write_add_passthrough() } /object/vm/ctl/add_passthrough
-vm_instance: attach_tap { self.write_attach_tap() } /object/vm/ctl/attach_tap
+{
+  "name": "vm.instance",
+  "version": 1,
+  "internal_path": "/object/vm",
+  "read_fields": [
+    {
+      "name": "name",
+      "field_type": "string",
+      "internal_mapping": "props.name",
+      "readable": true,
+      "writable": false
+    },
+    {
+      "name": "state",
+      "field_type": "u8",
+      "internal_mapping": "props.state",
+      "readable": true,
+      "writable": false
+    },
+    {
+      "name": "vcpu_count",
+      "field_type": "u32",
+      "internal_mapping": "config.vcpu_count",
+      "readable": true,
+      "writable": false
+    },
+    {
+      "name": "memory_mb",
+      "field_type": "u32",
+      "internal_mapping": "config.memory_mb",
+      "readable": true,
+      "writable": false
+    },
+    {
+      "name": "vcpu_weight",
+      "field_type": "u32",
+      "internal_mapping": "config.vcpu_weight",
+      "readable": true,
+      "writable": false
+    },
+    {
+      "name": "passthrough_devices",
+      "field_type": "array",
+      "internal_mapping": "props.passthrough",
+      "readable": true,
+      "writable": false
+    },
+    {
+      "name": "tap_interface",
+      "field_type": "string",
+      "internal_mapping": "props.tap",
+      "readable": true,
+      "writable": false
+    }
+  ],
+  "write_fields": [
+    {
+      "name": "start",
+      "field_type": "command",
+      "internal_mapping": "ctl.start",
+      "readable": false,
+      "writable": true
+    },
+    {
+      "name": "pause",
+      "field_type": "command",
+      "internal_mapping": "ctl.pause",
+      "readable": false,
+      "writable": true
+    },
+    {
+      "name": "stop",
+      "field_type": "command",
+      "internal_mapping": "ctl.stop",
+      "readable": false,
+      "writable": true
+    },
+    {
+      "name": "reset",
+      "field_type": "command",
+      "internal_mapping": "ctl.reset",
+      "readable": false,
+      "writable": true
+    },
+    {
+      "name": "snapshot",
+      "field_type": "command",
+      "internal_mapping": "ctl.snapshot",
+      "readable": false,
+      "writable": true
+    },
+    {
+      "name": "add_passthrough",
+      "field_type": "command",
+      "internal_mapping": "ctl.add_passthrough",
+      "readable": false,
+      "writable": true
+    },
+    {
+      "name": "attach_tap",
+      "field_type": "command",
+      "internal_mapping": "ctl.attach_tap",
+      "readable": false,
+      "writable": true
+    }
+  ],
+  "rate_limit": {
+    "max_calls_per_sec": 100
+  },
+  "audit": true
+}

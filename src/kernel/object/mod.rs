@@ -5,7 +5,6 @@ use hashbrown::HashMap;
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use core::sync::atomic::AtomicUsize;
 
 #[derive(Debug)]
 pub struct KEntry {

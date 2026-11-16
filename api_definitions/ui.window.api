@@ -1,28 +1,104 @@
-# ui.window 对外接口契约（片段格式）
-version = 1.0
-target = ui.window
-env = rust
-exec = /system/kernel/ui
-internal_loc = map + symbol + register
-min_os_version = 1.0
-global_acl = kernel
-global_limit = 120次/秒
-
-object /object/ui/window ui_window
-
-# ---- 只读条目 ----
-ui_window: title { } /object/ui/window/props/title
-ui_window: x { } /object/ui/window/rect/x
-ui_window: y { } /object/ui/window/rect/y
-ui_window: width { } /object/ui/window/rect/width
-ui_window: height { } /object/ui/window/rect/height
-ui_window: state { } /object/ui/window/props/state
-ui_window: z_order { } /object/ui/window/props/z_order
-
-# ---- 可写控制条目 ----
-ui_window: submit_buffer { self.write_submit_buffer() } /object/ui/window/ctl/submit_buffer
-ui_window: resize { self.write_resize() } /object/ui/window/ctl/resize
-ui_window: move { self.write_move() } /object/ui/window/ctl/move
-ui_window: minimize { self.write_minimize() } /object/ui/window/ctl/minimize
-ui_window: maximize { self.write_maximize() } /object/ui/window/ctl/maximize
-ui_window: close { self.write_close() } /object/ui/window/ctl/close
+{
+  "name": "ui.window",
+  "version": 1,
+  "internal_path": "/object/ui/window",
+  "read_fields": [
+    {
+      "name": "title",
+      "field_type": "string",
+      "internal_mapping": "props.title",
+      "readable": true,
+      "writable": false
+    },
+    {
+      "name": "x",
+      "field_type": "i32",
+      "internal_mapping": "rect.x",
+      "readable": true,
+      "writable": false
+    },
+    {
+      "name": "y",
+      "field_type": "i32",
+      "internal_mapping": "rect.y",
+      "readable": true,
+      "writable": false
+    },
+    {
+      "name": "width",
+      "field_type": "u32",
+      "internal_mapping": "rect.width",
+      "readable": true,
+      "writable": false
+    },
+    {
+      "name": "height",
+      "field_type": "u32",
+      "internal_mapping": "rect.height",
+      "readable": true,
+      "writable": false
+    },
+    {
+      "name": "state",
+      "field_type": "u8",
+      "internal_mapping": "props.state",
+      "readable": true,
+      "writable": false
+    },
+    {
+      "name": "z_order",
+      "field_type": "u32",
+      "internal_mapping": "props.z_order",
+      "readable": true,
+      "writable": false
+    }
+  ],
+  "write_fields": [
+    {
+      "name": "submit_buffer",
+      "field_type": "command",
+      "internal_mapping": "ctl.submit_buffer",
+      "readable": false,
+      "writable": true
+    },
+    {
+      "name": "resize",
+      "field_type": "command",
+      "internal_mapping": "ctl.resize",
+      "readable": false,
+      "writable": true
+    },
+    {
+      "name": "move",
+      "field_type": "command",
+      "internal_mapping": "ctl.move",
+      "readable": false,
+      "writable": true
+    },
+    {
+      "name": "minimize",
+      "field_type": "command",
+      "internal_mapping": "ctl.minimize",
+      "readable": false,
+      "writable": true
+    },
+    {
+      "name": "maximize",
+      "field_type": "command",
+      "internal_mapping": "ctl.maximize",
+      "readable": false,
+      "writable": true
+    },
+    {
+      "name": "close",
+      "field_type": "command",
+      "internal_mapping": "ctl.close",
+      "readable": false,
+      "writable": true
+    }
+  ],
+  "rate_limit": {
+    "max_calls_per_sec": 120
+  },
+  "audit": false
+}

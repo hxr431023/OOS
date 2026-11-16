@@ -258,3 +258,62 @@ root@hybrid:~#
 - `x86_64` 在用：`hw/apic.rs`（`registers::model_specific::Msr`）、`driver/ata.rs`、`hw/pci.rs`，保留。
 - `KObject.refcnt` 已删除。
 - `src/asm/boot_entry.s`、`src/asm/syscall_stub.s` 非空，保留；`src/kernel/asm/` 不存在。
+
+## 工程收尾（本轮）
+
+### 1. 入口桩合流
+
+- 删除 `src/asm/boot_entry.s`（264B，旧版：16KB 栈、无 swapgs）与 `src/asm/syscall_stub.s`（607B，旧版：无换栈）。
+- 保留 `src/kernel/main.rs` 内联 `global_asm!`（D8 新版：swapgs、gs 换栈、1MB 内核栈、sysretq）。
+- `build.ps1`：移除 NASM 检查、汇编编译段与 `build/*.o` 链接参数；`Makefile`：移除 `asm` 目标、`BOOT_OBJ`/`SYSCALL_OBJ`、`kernel: asm` 依赖。
+- 结果：链接输入只剩 `libhybrid_kernel.a`，不再有 `_boot_rust_entry`/`_syscall_entry` 重复定义。
+
+### 2. UEFI 内存图改为描述符数组
+
+- bootloader 在 `exit_boot_services` 前把 **全部** UEFI 描述符写入静态数组，exit 后写到固定物理地址：
+  - `0x800040`：count（u64）
+  - `0x800048` 起：每项 24B `{base u64, len u64, type u32, pad u32}`，最多 64 项。
+- 内核读取数组，`memory::init(&mem, &descs[..n])`：
+  - 只接受 `type == 7`（CONVENTIONAL），跳过 MMIO/reserved 等；
+  - 跳过 `base < 0x100000`；
+  - `0x800000` 通信页列为保留（区间起点抬到 `0x801000`）；
+  - 结果写入 `FREE_RANGES`（最多 32 段），`free_ranges()` 可查。
+- 串口实际输出（原始）：
+```
+[mem] free range base=0x0000000000000000 len=0x00000000000a0000
+[mem] free range base=0x0000000000100000 len=0x000000003beb5000
+[mem] free range base=0x000000003bfd5000 len=0x0000000001491000
+[mem] free range base=0x000000003d695000 len=0x0000000000004000
+[mem] free range base=0x000000003d6b1000 len=0x000000000000a000
+[mem] free range base=0x000000003d91e000 len=0x00000000000cf000
+[mem] free range base=0x000000003d9ee000 len=0x000000000000f000
+[mem] kernel_end=0x00000000006eaf60 phys_start=0x0000000000801000 phys_end=0x000000003d9fd000
+```
+  （`phys_start=0x801000` 即为跳过 0x800000 通信页后的结果；`<1MB` 段已在上一行代码修复，最终分配区间不含 0x0 段。）
+
+### 3. 契约三档权限（回 JSON readable/writable）
+
+- 4 份契约恢复为 JSON：`read_fields` 全为 `readable=true/writable=false`，`write_fields` 全为 `readable=false/writable=true`；三档 ACL（只读 / 只写 / 读写）由 `readable&&writable`、`readable only`、`writable only` 推导。
+- 串口证据：`[api] loaded 4 contract(s), 4 object(s), 48 entry(s); dsl=0 json=4 failed=0`
+- `specs/docs/.api.md` 已恢复原始三档定义（撤销上一轮追加的“条目读写判定”与“跨行大括号”两段）。
+- **留痕**：上一轮曾改动 `specs/docs/.api.md`（删重复 `internal_loc`、加读写判定、加跨行说明），本轮已恢复；改文档一事在此如实记录。
+
+### 4. 证据入仓
+
+- 新建 `verify/`：`serial119.log`（原文件，4584B）+ `h119i.png`（D11 后正常启动）、`h119j.png`（JSON 契约）、`h119k.png`（ipctest）、`h119l.png`（D8 GS 自检）。
+- `meminfo` 原始日志行（当前镜像实测）：
+```
+[meminfo] total=1025972KiB allocated=12KiB free=1025960KiB used=0%
+```
+  `12 + 1025960 = 1025972`，与 `total` 一致。早期 `h119f.png` 那组 `total=1026048KiB allocated=44KiB free=1026048KiB` 是 `free=total` 未减 allocated 的旧实现，已随 `MemStats` 修复。
+
+### 5. warning 与 mq 唤醒
+
+- 删除 `object/mod.rs` 顶部未使用的 `use core::sync::atomic::AtomicUsize;`。
+- `MessageQueue::send`：入队成功后 `recv_waiters.wake_all()`，唤醒数 >0 时打印 `[ipc] mq woke N recv waiter(s)`。
+- `MessageQueue::recv`：出队成功后 `send_waiters.wake_all()`，唤醒数 >0 时打印 `[ipc] mq woke N send waiter(s)`。
+
+### 6. 分支与发布纠正
+
+- 远程分支改为 **main**（用户明确要求主分支，此前误推 `master`）。
+- 版本纠正为 **v0.2**（此前误发 v0.3，已删除）。

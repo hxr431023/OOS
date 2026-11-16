@@ -27,7 +27,6 @@ function Check-Tool {
 Write-Host "`n[1/6] Checking tools..." -ForegroundColor Yellow
 $hasRustc = Check-Tool "Rust" "rustc"
 $hasCargo = Check-Tool "Cargo" "cargo"
-$hasNasm = Check-Tool "NASM" "nasm"
 $hasLld = Check-Tool "LLD linker" "ld.lld"
 $hasQemu = Check-Tool "QEMU" "qemu-system-x86_64"
 
@@ -50,14 +49,6 @@ if ($Clean) {
 # 创建输出目录
 New-Item -ItemType Directory -Force -Path build, build/iso, build/iso/EFI, build/iso/EFI/boot, build/iso/EFI/hybrid | Out-Null
 
-# 编译汇编
-Write-Host "`n[3/6] Compiling assembly..." -ForegroundColor Yellow
-nasm -f elf64 src/asm/boot_entry.s -o build/boot_entry.o
-if ($LASTEXITCODE -ne 0) { throw "NASM boot_entry failed" }
-nasm -f elf64 src/asm/syscall_stub.s -o build/syscall_stub.o
-if ($LASTEXITCODE -ne 0) { throw "NASM syscall_stub failed" }
-Write-Host "  Assembly compiled OK" -ForegroundColor Green
-
 # 编译内核
 Write-Host "`n[4/6] Building kernel (x86_64-unknown-none, release)..." -ForegroundColor Yellow
 cargo build --target x86_64-unknown-none --release --lib
@@ -74,10 +65,10 @@ if (-not (Test-Path $kernelLib)) {
 Write-Host "  Using: $kernelLib"
 
 if ($hasLld) {
-    ld.lld -n -T linker.ld -o build/kernel.elf build/boot_entry.o build/syscall_stub.o $kernelLib
+    ld.lld -n -T linker.ld -o build/kernel.elf $kernelLib
 } else {
     Write-Host "  WARNING: ld.lld not found, using rust-lld fallback" -ForegroundColor Yellow
-    rust-lld -flavor gnu -n -T linker.ld -o build/kernel.elf build/boot_entry.o build/syscall_stub.o $kernelLib
+    rust-lld -flavor gnu -n -T linker.ld -o build/kernel.elf $kernelLib
 }
 if ($LASTEXITCODE -ne 0) { throw "Kernel link failed" }
 

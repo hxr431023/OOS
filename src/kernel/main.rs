@@ -220,7 +220,27 @@ unsafe extern "C" fn _kmain(_uefi_mem_info: *const memory::UefiMemoryMap) {
     sio_str(" fmt=");
     sio_hex64(mem.fb_format as u64);
     sio_str("\n");
-    memory::init(&mem);
+    // D2 修订：读取 bootloader 交出的 (base,len,type) 描述符数组
+    let mut descs = [(0u64, 0u64, 0u32); 64];
+    let ndesc = unsafe { core::ptr::read_volatile(0x800040 as *const u64) as usize };
+    let n = core::cmp::min(ndesc, 64);
+    for i in 0..n {
+        let p = 0x800048 + i * 24;
+        let b = unsafe { core::ptr::read_volatile(p as *const u64) };
+        let l = unsafe { core::ptr::read_volatile((p + 8) as *const u64) };
+        let ty = unsafe { core::ptr::read_volatile((p + 16) as *const u32) };
+        descs[i] = (b, l, ty);
+    }
+    for &(b, l, ty) in &descs[..n] {
+        if ty == 7 && l > 0 {
+            sio_str("[mem] free range base=0x");
+            sio_hex64(b);
+            sio_str(" len=0x");
+            sio_hex64(l);
+            sio_str("\n");
+        }
+    }
+    memory::init(&mem, &descs[..n]);
     // D1：内核镜像区间与页分配器区间核对（串口证据）
     {
         let (pstart, pend) = memory::phys_range();

@@ -62,16 +62,32 @@ impl MessageQueue {
     }
 
     pub fn send(&self, data: &[u8]) -> Result<(), SysErr> {
-        let mut q = self.msgs.lock();
-        if q.len() >= self.capacity {
-            return Err(SysErr::EAGAIN);
+        {
+            let mut q = self.msgs.lock();
+            if q.len() >= self.capacity {
+                return Err(SysErr::EAGAIN);
+            }
+            q.push_back(Vec::from(data));
         }
-        q.push_back(Vec::from(data));
+        let n = self.recv_waiters.wake_all();
+        if n > 0 {
+            crate::println!("[ipc] mq woke {} recv waiter(s)", n);
+        }
         Ok(())
     }
 
     pub fn recv(&self) -> Result<Vec<u8>, SysErr> {
-        self.msgs.lock().pop_front().ok_or(SysErr::EAGAIN)
+        let msg = self.msgs.lock().pop_front();
+        match msg {
+            Some(m) => {
+                let n = self.send_waiters.wake_all();
+                if n > 0 {
+                    crate::println!("[ipc] mq woke {} send waiter(s)", n);
+                }
+                Ok(m)
+            }
+            None => Err(SysErr::EAGAIN),
+        }
     }
 
     pub fn peek(&self) -> Result<usize, SysErr> {

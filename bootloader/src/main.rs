@@ -35,6 +35,10 @@ struct MemInfo {
     fb_format: u32,
 }
 
+/// D2 修订：UEFI memory map 描述符数组（(base,len,type)，最多 64 项）
+static mut MEM_DESCS: [(u64, u64, u32); 64] = [(0, 0, 0); 64];
+static mut MEM_DESC_COUNT: usize = 0;
+
 /// 全局 mem_info：用 static（引导器镜像内）而非栈，
 /// 避免 exit_boot_services 之后 UEFI 覆盖引导器栈导致 mem_info 损坏。
 static mut MEM_INFO: MemInfo = MemInfo {
@@ -212,20 +216,21 @@ fn efi_main(_image: Handle, mut st: SystemTable<Boot>) -> Status {
     let mut ram_start = 0x100000u64;
     let mut ram_end = 0u64;
     let mut mm_buf = alloc::vec![0u8; 64 * 1024];
+    unsafe { MEM_DESC_COUNT = 0; }
     if let Ok(mm) = st.boot_services().memory_map(&mut mm_buf) {
         for d in mm.entries() {
-            // 只统计 Conventional（可自由分配）内存，排除 reserved/MMIO/高地址空洞
-            if d.ty != MemoryType::CONVENTIONAL {
-                continue;
-            }
             let s = d.phys_start;
             let e = s.saturating_add(d.page_count.saturating_mul(4096));
-            if s >= 0x100000 && s < ram_start {
-                ram_start = s;
+            // D2 修订：全部描述符交给内核，由内核跳过非 CONVENTIONAL 与 MMIO
+            unsafe {
+                if MEM_DESC_COUNT < 64 {
+                    MEM_DESCS[MEM_DESC_COUNT] = (s, e.saturating_sub(s), d.ty.0 as u32);
+                    MEM_DESC_COUNT += 1;
+                }
             }
-            if e > ram_end && e <= 0x1_0000_0000 {
-                ram_end = e;
-            }
+            if d.ty != MemoryType::CONVENTIONAL { continue; }
+            if s >= 0x100000 && s < ram_start { ram_start = s; }
+            if e > ram_end && e <= 0x1_0000_0000 { ram_end = e; }
         }
     }
     if ram_end <= ram_start {
@@ -286,6 +291,17 @@ fn efi_main(_image: Handle, mut st: SystemTable<Boot>) -> Status {
         // D2：真实可用物理区间（0x800030 / 0x800038，exit 后保留）
         core::ptr::write_volatile(0x800030 as *mut u64, core::ptr::read_volatile(&MEM_INFO.ram_start as *const u64));
         core::ptr::write_volatile(0x800038 as *mut u64, core::ptr::read_volatile(&MEM_INFO.ram_end as *const u64));
+        // D2 修订：描述符数组（count @0x800040，数组 @0x800048，每项 24 字节）
+        core::ptr::write_volatile(0x800040 as *mut u64, MEM_DESC_COUNT as u64);
+        let mut i = 0usize;
+        while i < MEM_DESC_COUNT {
+            let (bb, ll, tt) = MEM_DESCS[i];
+            let p = 0x800048 + i * 24;
+            core::ptr::write_volatile(p as *mut u64, bb);
+            core::ptr::write_volatile((p + 8) as *mut u64, ll);
+            core::ptr::write_volatile((p + 16) as *mut u32, tt);
+            i += 1;
+        }
     }
     unsafe {
         // 回读确认 0x800000 写入生效（保留真实 G_FB_* 值，不覆盖）
