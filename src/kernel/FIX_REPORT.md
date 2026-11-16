@@ -216,3 +216,45 @@ root@hybrid:~#
 ### git
 - 本地已 `git init` 并提交：`a09e1c3 fix(D1-D13): 按任务书修复内核缺陷`
 - 远程 `https://github.com/hxr431023/OOS.git` 推送失败：`Connection was reset`（网络无法访问 GitHub），需代理/VPN 后重试。
+
+
+### D6 修订版（以文档附赠片段为准）
+
+- `api_definitions/*.api` 已由 JSON 转为片段格式（4 份：driver.manager / net.socket / ui.window / vm.instance）。
+- `api_parser.rs` 实现片段 DSL：头部 `key = value`、`object <目录> <名称>`、`<对象>: <条目> { 转换代码 } <内部路径>`（支持跨行大括号）、`EVENT:`、`LIMIT_OVERRIDE:`、`ACL_OVERRIDE:`。
+- 条目 ACL 按片段语义推导：含 `set_`/`write`/`register`/`raise` → 只写；空 `{}` 或 `return` → 只读。
+- `internal_mapping`（片段右侧内部路径）写入 `KEntry.internal_mapping` 元数据，不丢弃。
+- JSON 兼容路径保留（遇 `{` 开头文件打印 `(JSON file, spec is DSL fragment)`）。
+- 串口证据：
+```
+[api] loaded 4 contract(s), 4 object(s), 48 entry(s); dsl=4 json=0 failed=0
+```
+
+### 规范修订（经用户授权，非任务书行为）
+
+`specs/docs/.api.md` 与片段对照后修正三处：
+
+1. 删除 4.1 中重复出现的 `internal_loc` 行（片段仅一次）。
+2. 补充“条目读写属性判定”：片段中只读/可写分节注释语法相同，读写由转换代码语义确定。
+3. 补充“大括号转换代码可跨行书写”，与 `acl.md` 的 `get_object_acl` 多行片段一致。
+
+> 说明：任务书要求“禁止改 docs”，但用户在本轮明确裁定“片段与规范对不上就改规范、以我为准”，故按用户授权执行，并在此留痕。
+
+### D3 补充（ACL 与契约打通）
+
+- `KEntry::new(name, acl)` 改为显式 ACL 入参，不再有统一默认值。
+- 新增 `KObject::create_entry_with_acl(name, caller_acl, entry_acl, internal_mapping)`；非契约的 `create_entry` 默认 `ENTRY_READ`。
+- 契约条目 ACL 由 readable/writable（JSON）或转换代码语义（DSL）推导。
+- 串口证据：
+```
+[acltest] contract register acl read=false write=true (read must be false)
+[acltest] contract driver_name acl read=true write=false (write must be false)
+[acltest] PASS
+```
+
+### D12 修订版（全量确认）
+
+- `rg 'buddy_alloc|embedded_time' src/kernel` → 0 命中（仅 FIX_REPORT 文本提及），已从 `Cargo.toml` 移除。
+- `x86_64` 在用：`hw/apic.rs`（`registers::model_specific::Msr`）、`driver/ata.rs`、`hw/pci.rs`，保留。
+- `KObject.refcnt` 已删除。
+- `src/asm/boot_entry.s`、`src/asm/syscall_stub.s` 非空，保留；`src/kernel/asm/` 不存在。

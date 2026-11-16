@@ -14,16 +14,20 @@ pub struct KEntry {
     pub lib_inst_id: u64,
     pub data: Mutex<Option<alloc::vec::Vec<u8>>>,
     pub waiters: crate::ipc::WaitQueue,
+    /// 契约 internal_mapping 元数据（D6 修订：不得丢弃）
+    pub internal_mapping: String,
 }
 
 impl KEntry {
-    pub fn new(name: &str) -> Self {
+    /// D3 补充：不再有统一默认值，ACL 由调用方显式传入
+    pub fn new(name: &str, acl: AclMask) -> Self {
         Self {
             name: String::from(name),
-            acl: AclMask::ENTRY_READ,
+            acl,
             lib_inst_id: 0,
             data: Mutex::new(None),
             waiters: crate::ipc::WaitQueue::new(),
+            internal_mapping: String::new(),
         }
     }
 }
@@ -46,7 +50,19 @@ impl KObject {
         }
     }
 
+    /// 非契约来源条目（subsys 手工注册）：默认只读（D3 补充）
     pub fn create_entry(&self, name: &str, caller_acl: AclMask) -> Result<Arc<KEntry>, SysErr> {
+        self.create_entry_with_acl(name, caller_acl, AclMask::ENTRY_READ, "")
+    }
+
+    /// 契约来源条目：ACL 由契约推导，internal_mapping 存入元数据（D6 修订）
+    pub fn create_entry_with_acl(
+        &self,
+        name: &str,
+        caller_acl: AclMask,
+        entry_acl: AclMask,
+        internal_mapping: &str,
+    ) -> Result<Arc<KEntry>, SysErr> {
         if !crate::acl::check_perm(caller_acl, AclMask::CREATE_ENTRY) {
             return Err(SysErr::EACCES);
         }
@@ -54,7 +70,9 @@ impl KObject {
         if entries.contains_key(name) {
             return Err(SysErr::EINVAL);
         }
-        let entry = Arc::new(KEntry::new(name));
+        let mut entry = KEntry::new(name, entry_acl);
+        entry.internal_mapping = String::from(internal_mapping);
+        let entry = Arc::new(entry);
         entries.insert(String::from(name), entry.clone());
         Ok(entry)
     }

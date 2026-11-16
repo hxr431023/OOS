@@ -781,6 +781,23 @@ pub fn acltest_selfcheck() {
     crate::println!("[acltest] empty read => {}", if r_empty.is_err() { "EACCES(deny) OK" } else { "ALLOWED BAD" });
     crate::println!("[acltest] read-only read => {}", if r_rd.is_ok() { "OK" } else { "DENIED BAD" });
     crate::println!("[acltest] read-only write => {}", if r_wr.is_err() { "EACCES(deny) OK" } else { "ALLOWED BAD" });
+    // D3 补充：契约条目 ACL 推导验证（register 应只写，driver_name 应只读）
+    if let Ok(mgr) = crate::object::lookup("/object/driver_mgr") {
+        if let Some(e) = mgr.get_entry("register") {
+            crate::println!(
+                "[acltest] contract register acl read={} write={} (read must be false)",
+                e.acl.contains(AclMask::ENTRY_READ),
+                e.acl.contains(AclMask::ENTRY_WRITE)
+            );
+        }
+        if let Some(e) = mgr.get_entry("driver_name") {
+            crate::println!(
+                "[acltest] contract driver_name acl read={} write={} (write must be false)",
+                e.acl.contains(AclMask::ENTRY_READ),
+                e.acl.contains(AclMask::ENTRY_WRITE)
+            );
+        }
+    }
     let pass = r_empty.is_err() && r_rd.is_ok() && r_wr.is_err();
     crate::println!("[acltest] {}", if pass { "PASS" } else { "FAIL" });
 }
