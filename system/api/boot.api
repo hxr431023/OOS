@@ -1,0 +1,24 @@
+# boot.api 启动流程对外接口契约（片段）
+version = 1.0
+target = boot
+env = rust
+exec = /system/kernel/core
+internal_loc = map + symbol + register
+min_os_version = 1.0
+global_acl = kernel
+global_limit = 100次/秒
+
+object /system/api/boot boot
+
+boot: phase { } /internal/boot/phase
+boot: state { } /internal/boot/state
+boot: hw_enum { } /internal/boot/hw
+boot: get_phase {
+    return self.get_phase()
+} /internal/boot/phase_get
+
+EVENT:
+    boot_phase_changed(phase: u8) ｜ /internal/event/boot_phase
+
+ACL_OVERRIDE:
+    get_phase: user_foreground

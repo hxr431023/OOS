@@ -9,6 +9,8 @@ use core::panic::PanicInfo;
 
 // 底层底座
 mod sync;
+mod boot;
+mod service;
 mod memory;
 mod console;
 mod vga;
@@ -275,6 +277,7 @@ unsafe extern "C" fn _kmain(_uefi_mem_info: *const memory::UefiMemoryMap) {
     object::init();
     acl::init();
     ipc::init();
+    boot::init();
     println!("kobject subsystem ready");
 
     glue_layer::init();
@@ -284,11 +287,16 @@ unsafe extern "C" fn _kmain(_uefi_mem_info: *const memory::UefiMemoryMap) {
 
     hw::pci::init();
 
+    boot::advance(boot::P_MODULE);
+    module_mgr::init();
+    let nmod = module_mgr::manager().load_builtins();
+    println!("[module] built-ins loaded: {}", nmod);
     process::init();
     scheduler::init();
+    service::init();
+    boot::advance(boot::P_USER);
 
     api_bridge::init();
-    module_mgr::init();
     driver_mgr::init();
     net::init();
     gfx::init();
@@ -297,6 +305,8 @@ unsafe extern "C" fn _kmain(_uefi_mem_info: *const memory::UefiMemoryMap) {
     subsys::init();
 
     println!("=== ALL SUBSYSTEMS INITIALIZED ===");
+    service::selftest();
+    boot::advance(boot::P_CMD);
 
     // D3 启动自检：ACL 判定（不依赖键盘交互，串口/屏幕留证）
     {

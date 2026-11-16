@@ -263,11 +263,32 @@ core::arch::global_asm!(
         push r11
     .endm
     .section .text
+    .extern syscall_dispatch
     .global _int80_entry
     _int80_entry:
-        mov dx, 0x3F8
-        mov al, 'E'
-        out dx, al
+        push rcx
+        push r11
+        push rdi
+        push rsi
+        push rdx
+        push r10
+        push r8
+        push r9
+        mov r9, r8
+        mov r8, r10
+        mov rcx, rdx
+        mov rdx, rsi
+        mov rsi, rdi
+        mov rdi, rax
+        call syscall_dispatch
+        pop r9
+        pop r8
+        pop r10
+        pop rdx
+        pop rsi
+        pop rdi
+        pop r11
+        pop rcx
         iretq
 
     .global _exc_ud

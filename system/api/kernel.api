@@ -1,0 +1,32 @@
+# kernel.api 内核镜像与模块契约（片段）
+version = 1.0
+target = kernel
+env = rust
+exec = /system/kernel/core
+internal_loc = map + symbol + register
+min_os_version = 1.0
+global_acl = core_system
+global_limit = 50次/秒
+
+object /system/api/kernel kernel
+
+kernel: version { } /internal/kernel/version
+kernel: modules { } /internal/kernel/modules
+kernel: params { } /internal/kernel/params
+kernel: load_module {
+    self.load_module(path)
+} /internal/kernel/module/load
+kernel: unload_module { self.unload_module(name) } /internal/kernel/module/unload
+
+EVENT:
+    module_loaded(name: str) ｜ /internal/event/module_load
+    module_unloaded(name: str) ｜ /internal/event/module_unload
+    kernel_panic(reason: str) ｜ /internal/event/kernel_panic
+
+LIMIT_OVERRIDE:
+    load_module: 10次/秒
+    unload_module: 10次/秒
+
+ACL_OVERRIDE:
+    load_module: core_system
+    unload_module: core_system

@@ -70,6 +70,62 @@ impl ModuleManager {
         self.global_symbols.lock().get(name).copied()
     }
 
+    /// 校验 ELF64 内核模块镜像（准入检查：魔数/位数/类型/机器/段表）
+    pub fn verify_elf(data: &[u8]) -> Result<(u64, usize), SysErr> {
+        if data.len() < 64 { return Err(SysErr::EINVAL); }
+        if &data[0..4] != b"\x7fELF" { return Err(SysErr::EINVAL); }
+        if data[4] != 2 { return Err(SysErr::EINVAL); }      // ELF64
+        if data[5] != 1 { return Err(SysErr::EINVAL); }      // little endian
+        let e_type = u16::from_le_bytes([data[16], data[17]]);
+        if e_type != 1 { return Err(SysErr::EINVAL); }       // ET_REL (.ko)
+        let e_machine = u16::from_le_bytes([data[18], data[19]]);
+        if e_machine != 62 { return Err(SysErr::EINVAL); }   // x86-64
+        let e_phoff = u64::from_le_bytes(data[32..40].try_into().unwrap());
+        let e_phnum = u16::from_le_bytes([data[56], data[57]]) as usize;
+        if e_phnum == 0 || e_phoff == 0 { return Err(SysErr::EINVAL); }
+        if e_phoff as usize + e_phnum * 56 > data.len() { return Err(SysErr::EINVAL); }
+        Ok((e_phoff, e_phnum))
+    }
+
+    /// 内置模块登记（随内核镜像装载，boot.md 阶段 5）
+    pub fn register_builtin(&self, name: &str, kind: &str) {
+        let mut modules = self.modules.lock();
+        if modules.contains_key(name) { return; }
+        let mut module = LoadedModule::new(name, 0, 0);
+        *module.state.lock() = ModuleState::Loaded;
+        module.exported_symbols.lock().insert(String::from("kind"), 0);
+        modules.insert(String::from(name), module);
+        crate::println!("[module] builtin {} ({}) loaded", name, kind);
+    }
+
+    /// 按 boot.md 阶段 5 装载全部内置扩展（VMX 仅在 CPU 支持时加载）
+    pub fn load_builtins(&self) -> usize {
+        let list: [(&str, &str); 11] = [
+            ("block", "modules/block"),
+            ("fs", "aux_modules/fs"),
+            ("vfs", "aux_modules/vfs"),
+            ("devfs", "aux_modules/vfs-virtual"),
+            ("net", "aux_modules/net"),
+            ("nic", "modules/net"),
+            ("gpu", "modules/gpu"),
+            ("input", "modules/input"),
+            ("rtc", "modules/rtc"),
+            ("iommu", "modules/iommu"),
+            ("vmx", "modules/vmx"),
+        ];
+        let vmx = has_vmx();
+        let mut n = 0;
+        for (name, kind) in list {
+            if name == "vmx" && !vmx {
+                crate::println!("[module] vmx skipped (cpu without VMX)");
+                continue;
+            }
+            self.register_builtin(name, kind);
+            n += 1;
+        }
+        n
+    }
+
     /// 加载内核模块（.ko ELF）
     pub fn load_module(&self, name: &str, elf_data: &[u8]) -> Result<(), SysErr> {
         let mut modules = self.modules.lock();
@@ -77,9 +133,12 @@ impl ModuleManager {
             return Err(SysErr::EINVAL);
         }
 
-        // 1. 解析ELF，分配内核内存，拷贝段
-        let base_addr = 0xFFFFFFFFC0000000; // 简化：固定地址
+        // 1. 准入校验 + 按槽位分配内核空间
+        let (phoff, phnum) = ModuleManager::verify_elf(elf_data)?;
+        let slot = modules.len() as u64;
+        let base_addr = 0xFFFFFFFFC0000000u64.wrapping_add(slot * 0x200000);
         let size = elf_data.len();
+        crate::println!("[module] {} elf ok: phoff={} phnum={} base=0x{:x}", name, phoff, phnum, base_addr);
         // 实际：解析ELF程序头，映射可加载段，处理重定位
 
         // 2. 解析依赖，查找全局符号表
@@ -160,6 +219,12 @@ pub fn init() {
     mgr.register_symbol("log_write", 0xFFFFFFFF80400000);
     MOD_MGR.call_once(|| mgr);
     crate::println!("module manager ready, core symbols exported");
+}
+
+/// CPUID.1:ECX[5] = VMX
+pub fn has_vmx() -> bool {
+    let r = unsafe { core::arch::x86_64::__cpuid(1) };
+    r.ecx & (1 << 5) != 0
 }
 
 pub fn manager() -> &'static ModuleManager {

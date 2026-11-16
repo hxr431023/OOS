@@ -1,0 +1,37 @@
+# service.api 服务管理子系统契约（片段）
+version = 1.0
+target = service
+env = rust
+exec = /system/userland/services/manager
+internal_loc = map + symbol + register
+min_os_version = 1.0
+global_acl = aux_system
+global_limit = 100次/秒
+
+object /system/api/service service
+
+service: list { } /internal/service/list
+service: state { } /internal/service/state
+service: start {
+    self.start(name)
+} /internal/service/start
+service: stop { self.stop(name) } /internal/service/stop
+service: restart { self.restart(name) } /internal/service/restart
+service: set_auto {
+    self.set_auto(name, enabled)
+} /internal/service/auto
+
+EVENT:
+    svc_started(name: str) ｜ /internal/event/svc_start
+    svc_stopped(name: str) ｜ /internal/event/svc_stop
+    svc_crashed(name: str, restart_count: u32) ｜ /internal/event/svc_crash
+    svc_fuse(name: str) ｜ /internal/event/svc_fuse
+
+LIMIT_OVERRIDE:
+    start: 50次/秒
+    restart: 50次/秒
+
+ACL_OVERRIDE:
+    start: aux_system
+    stop: aux_system
+    restart: aux_system

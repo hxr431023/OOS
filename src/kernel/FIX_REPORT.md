@@ -317,3 +317,15 @@ root@hybrid:~#
 
 - 远程分支改为 **main**（用户明确要求主分支，此前误推 `master`）。
 - 版本纠正为 **v0.2**（此前误发 v0.3，已删除）。
+
+## 本轮：开机流程 / 内核扩展 / 用户态服务骨架
+
+- `boot.rs`：阶段机 P_MICRO(3)/P_MODULE(5)/P_USER(6)/P_CMD(7)/P_READY(8)，`advance()` 打串口并写 `/object/boot.phase`；`init()` 建对象与 phase/state/hw_enum/get_phase 条目；`finish()` 打印"用户态服务已起、应用与 GUI 未建"。
+- `module/mod.rs`：新增 `verify_elf`（ELF64/小端/ET_REL/x86-64/段表边界）、`register_builtin`、`load_builtins`（block/fs/vfs/devfs/net/nic/gpu/input/rtc/iommu/vmx，VMX 按 CPUID.1:ECX[5] 跳过）、`has_vmx`；`load_module` 由固定基址改为 ELF 准入 + 槽位基址。段映射/重定位仍为后续。
+- `service/mod.rs`：SvcState(Stopped/Running/Crashed/Fused)、15 个服务、3 个容器（host/core、host/aux1、host/aux2）、start/stop/restart（3 次熔断）、`/object/service/mgr` 条目、启动 selftest。
+- `main.rs`：`boot::init()` → `advance(P_MODULE)` + `load_builtins()` → `process::init()`/`scheduler::init()` → `service::init()` + `advance(P_USER)` → selftest → `advance(P_CMD)`。
+- `user.rs`：`_int80_entry` 保存 rcx/r11/rdi/rsi/rdx/r10/r8/r9，按 SysV 映射后 `call syscall_dispatch`，恢复后 `iretq`。
+- `shell.rs`：新增 `boot`/`svc`/`module` 查询命令。
+- 契约：`system/api/boot.api`、`service.api`、`kernel.api` 片段，含 EVENT/LIMIT_OVERRIDE/ACL_OVERRIDE；尚未进 `api_parser` 的 include_str 列表。
+
+串口实测（改序后）：`[boot] phase 3 microkernel` → `[boot] phase 5 kernel-ext` → 10 条 `[module] builtin ... loaded` → `[boot] phase 6 user-init` → `[svc] manager ready: registered=15 auto_started=12 running=12 containers=3` → `[svc] PASS` → `[boot] phase 7 command-line`。

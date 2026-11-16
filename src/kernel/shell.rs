@@ -114,6 +114,24 @@ fn exec(cmd: &str) {
                 crate::user::dump_user_diag();
             }
         }
+        "boot" => {
+            let p = crate::boot::current();
+            crate::println!("[boot] current phase {} {}", p, crate::boot::phase_name(p));
+        }
+        "svc" | "service" => {
+            let list = crate::service::list();
+            crate::println!("[svc] {} service(s)", list.len());
+            for (name, st, auto) in list {
+                crate::println!("  {:<16} {:?} auto={}", name, st, auto);
+            }
+        }
+        "module" | "lsmod" => {
+            let m = crate::module_mgr::manager().modules.lock();
+            crate::println!("[module] {} loaded", m.len());
+            for (name, _mod) in m.iter() {
+                crate::println!("  {}", name);
+            }
+        }
         "ipctest" => {
             crate::ipc::selftest();
         }
