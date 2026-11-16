@@ -1,4 +1,3 @@
-#![no_std]
 //! Linux 兼容层（Linux.md）
 //! ELF加载、系统调用翻译、procfs/sysfs模拟
 //! 把Linux POSIX语义翻译成本系统对象条目操作
@@ -6,7 +5,6 @@ use crate::sync::Mutex;
 use crate::glue_layer::SysErr;
 use hashbrown::HashMap;
 use alloc::string::String;
-use alloc::vec::Vec;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u64)]

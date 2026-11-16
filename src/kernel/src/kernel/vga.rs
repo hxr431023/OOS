@@ -1,4 +1,3 @@
-#![no_std]
 //! Display layer: GOP framebuffer (UEFI graphics mode) preferred, else fall back
 //! to 0xB8000 VGA text mode (BIOS/legacy).
 use core::fmt;

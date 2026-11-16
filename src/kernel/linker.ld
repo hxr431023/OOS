@@ -28,4 +28,7 @@ SECTIONS
         *(.bss)
         *(.bss.*)
     }
+
+    /* 内核镜像物理结束地址：供 memory.rs 把内核自身区间从可分配物理内存中排除 */
+    PROVIDE(__kernel_end = .);
 }

@@ -1,4 +1,3 @@
-#![no_std]
 //! IOMMU (VT-d) 管理（memory.md）
 //! 防止DMA越权访问内存，虚拟机直通设备依赖此隔离
 use crate::sync::Mutex;

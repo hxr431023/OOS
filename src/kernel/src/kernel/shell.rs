@@ -1,4 +1,3 @@
-#![no_std]
 //! 涓插彛浜や簰 shell锛氳绯荤粺鍦?VirtualBox 閲屽彲鏁插懡浠ゃ€佺湅鍝嶅簲锛堢湡姝ｇ殑鎿嶄綔绯荤粺浜や簰锛?
 use alloc::string::String;
 use alloc::string::ToString;
@@ -29,6 +28,13 @@ pub fn run() -> ! {
     let mut len = 0usize;
     crate::println!("\n=== Hybrid 系统 ===");
     crate::println!("输入 \'help\' 查看命令");
+    acltest_selfcheck();
+    // D7 启动自检：串口留证 ipctest PASS
+    crate::ipc::selftest();
+    {
+        let st = crate::memory::mem_stats();
+        crate::println!("[meminfo] total={}KiB allocated={}KiB free={}KiB used={}%", st.total / 1024, st.allocated / 1024, st.free / 1024, if st.total > 0 { st.allocated * 100 / st.total } else { 0 });
+    }
     print_prompt();
     loop {
         if let Some(c) = crate::keyboard::poll_char() {
@@ -84,6 +90,8 @@ fn exec(cmd: &str) {
             crate::println!("  ps / tree / netstat / whoami / acl / sysobj");
             crate::println!("  ls / cat / mountcd / fonts / fontload / fontinit");
             crate::println!("  syscall / user / diag / cpuinfo / meminfo / sysinfo");
+            crate::println!("  charmap / charcopy / measure / loadcjk / zh");
+            crate::println!("  fontformats / fontresmap");
         }
         "ps" => {
             let procs = list_processes();
@@ -105,6 +113,9 @@ fn exec(cmd: &str) {
             unsafe {
                 crate::user::dump_user_diag();
             }
+        }
+        "ipctest" => {
+            crate::ipc::selftest();
         }
         "syscall" => {
             crate::syscall::self_test();
@@ -261,11 +272,49 @@ fn exec(cmd: &str) {
             crate::println!("\x1b[2J\x1b[H");
         }
         "memory" | "meminfo" => {
-            let (total, free) = crate::memory::mem_stats();
-            let used = total - free;
-            crate::println!("total phys: {} KiB", total / 1024);
-            crate::println!("free phys:  {} KiB", free / 1024);
-            crate::println!("used phys:  {} KiB ({}%)", used / 1024, if total > 0 { used * 100 / total } else { 0 });
+            let s = crate::memory::mem_stats();
+            crate::println!("[meminfo] total={}KiB allocated={}KiB free={}KiB used={}%", s.total / 1024, s.allocated / 1024, s.free / 1024, if s.total > 0 { s.allocated * 100 / s.total } else { 0 });
+        }
+        "entryview" => {
+            use crate::acl::AclMask;
+            let obj = match crate::object::create_object("/object/acltest") {
+                Ok(o) => o,
+                Err(_) => crate::object::lookup("/object/acltest").unwrap(),
+            };
+            let big = alloc::vec![0xABu8; 64 * 1024];
+            let _ = obj.create_entry("big", AclMask::default_system());
+            let _ = obj.write_entry("big", &big, AclMask::default_system());
+            let mut dst = alloc::vec![0u8; 64 * 1024];
+            let before = crate::memory::mem_stats().allocated;
+            let mut ok = true;
+            for _ in 0..100 {
+                match obj.read_entry_into("big", AclMask::ENTRY_READ, &mut dst) {
+                    Ok(n) if n == 64 * 1024 => {}
+                    _ => { ok = false; }
+                }
+            }
+            let after = crate::memory::mem_stats().allocated;
+            crate::println!("[entryview] 64KB x100 read_entry_into => {} alloc_delta={}B",
+                if ok { "OK" } else { "FAIL" }, after.saturating_sub(before));
+        }
+        "acltest" => {
+            use crate::acl::AclMask;
+            let obj = match crate::object::create_object("/object/acltest") {
+                Ok(o) => o,
+                Err(_) => crate::object::lookup("/object/acltest").unwrap(),
+            };
+            let _ = obj.create_entry("probe", AclMask::default_system());
+            let _ = obj.write_entry("probe", b"seed", AclMask::default_system());
+            let r_empty = obj.read_entry("probe", AclMask::empty());
+            let r_rd = obj.read_entry("probe", AclMask::ENTRY_READ);
+            let r_wr = obj.write_entry("probe", b"x", AclMask::ENTRY_READ);
+            crate::println!("[acltest] empty read => {}", if r_empty.is_err() { "EACCES(deny) OK" } else { "ALLOWED BAD" });
+            crate::println!("[acltest] read-only read => {}", if r_rd.is_ok() { "OK" } else { "DENIED BAD" });
+            crate::println!("[acltest] read-only write => {}", if r_wr.is_err() { "EACCES(deny) OK" } else { "ALLOWED BAD" });
+            if let Some(e) = obj.get_entry("probe") { e.waiters.push(7); }
+    let _ = obj.write_entry("probe", b"wakeup", AclMask::default_system());
+    let pass = r_empty.is_err() && r_rd.is_ok() && r_wr.is_err();
+            crate::println!("[acltest] {}", if pass { "PASS" } else { "FAIL" });
         }
         "systeminfo" | "sysinfo" => {
             crate::println!("Hybrid Kernel v0.1.0");
@@ -290,7 +339,7 @@ fn exec(cmd: &str) {
             unsafe {
                 core::arch::asm!("out dx, eax", in("dx") 0xCF9u16, in("eax") 0x06u32, options(nomem, nostack));
             }
-            unsafe { triple_fault() }
+            triple_fault()
         }
         "prompt" => {
             let rest = cmd.splitn(2, ' ').nth(1).unwrap_or("").trim();
@@ -488,6 +537,83 @@ fn exec(cmd: &str) {
                 crate::println!("CJK font not loaded - run 'loadcjk' first");
             }
         }
+        "fontformats" => {
+            // font.api: formats —— 支持的全部公开字体格式（font.md §2）
+            use crate::font_loader::FontFormat;
+            let fmts = [
+                FontFormat::TrueType,
+                FontFormat::OpenType,
+                FontFormat::Woff,
+                FontFormat::Woff2,
+                FontFormat::Eot,
+                FontFormat::TrueTypeCollection,
+                FontFormat::Type1,
+                FontFormat::Bitmap,
+                FontFormat::Lerf,
+            ];
+            crate::println!("font.api formats: 支持的公开字体格式（font.md §2）");
+            for f in fmts {
+                crate::println!("  {:<18} .{}", f.name(), f.ext());
+            }
+        }
+        "fontresmap" => {
+            // font.api: resmap —— 完整字体资源映射表（序号/标识/位置/格式）
+            let rows = crate::font_resmap::resmap_table();
+            crate::println!("resmap: {} 条（#序号 标识 位置 格式）", rows.len());
+            for r in rows {
+                crate::println!("  #{} {} {} {}", r.seq, r.font_id, r.path, r.format.name());
+            }
+        }
+        "charmap" => {
+            // 查看当前字体全部字符（font.md §1：打开字符映射器查看全部字符）
+            let list = crate::char_mapper::all_chars();
+            crate::println!("字符映射器: 共 {} 个字符", list.len());
+            let start = parts.next().and_then(|s| s.parse::<usize>().ok()).unwrap_or(0);
+            let end = core::cmp::min(start + 64, list.len());
+            let mut line = alloc::string::String::new();
+            for i in start..end {
+                let (_cp, ch) = list[i];
+                line.push(ch);
+                line.push(' ');
+                if (i - start + 1) % 8 == 0 {
+                    crate::println!("{}", line);
+                    line.clear();
+                }
+            }
+            if !line.is_empty() {
+                crate::println!("{}", line);
+            }
+            if end < list.len() {
+                crate::println!("... 下一页: charmap {}", end);
+            }
+        }
+        "charcopy" => {
+            // 选中单个字符并复制（font.md §1：选中字符后点击复制）
+            if let Some(arg) = parts.next() {
+                let cp = u32::from_str_radix(arg.trim_start_matches("0x"), 16).unwrap_or(0);
+                match crate::char_mapper::select_char(cp) {
+                    Some(ch) => crate::println!("已选中字符: {} (U+{:04X})", ch, cp),
+                    None => crate::println!("无效码点: {}", arg),
+                }
+            } else {
+                crate::println!("用法: charcopy <十六进制码点，如 4E2D>");
+            }
+        }
+        "measure" => {
+            // 文本测量（font.md §6.2）
+            let mut text = alloc::string::String::new();
+            for w in parts {
+                if !text.is_empty() {
+                    text.push(' ');
+                }
+                text.push_str(w);
+            }
+            crate::println!(
+                "文本宽度: {} px（{} 字符）",
+                crate::char_mapper::text_width(&text),
+                text.chars().count()
+            );
+        }
         "shutdown" | "poweroff" | "exit" => {            // 鍏虫満锛氬皾璇曞绉?ACPI PM 绔彛涓?SLP 鍊硷紙VirtualBox PM1a_CNT=0x400锛孮EMU=0x604锛?
             crate::println!("powering off...");
             unsafe {
@@ -639,4 +765,39 @@ fn triple_fault() -> ! {
             core::arch::asm!("hlt");
         }
     }
+}
+
+pub fn acltest_selfcheck() {
+    use crate::acl::AclMask;
+    let obj = match crate::object::create_object("/object/acltest") {
+        Ok(o) => o,
+        Err(_) => match crate::object::lookup("/object/acltest") { Ok(o) => o, Err(_) => return },
+    };
+    let _ = obj.create_entry("probe", AclMask::default_system());
+    let _ = obj.write_entry("probe", b"seed", AclMask::default_system());
+    let r_empty = obj.read_entry("probe", AclMask::empty());
+    let r_rd = obj.read_entry("probe", AclMask::ENTRY_READ);
+    let r_wr = obj.write_entry("probe", b"x", AclMask::ENTRY_READ);
+    crate::println!("[acltest] empty read => {}", if r_empty.is_err() { "EACCES(deny) OK" } else { "ALLOWED BAD" });
+    crate::println!("[acltest] read-only read => {}", if r_rd.is_ok() { "OK" } else { "DENIED BAD" });
+    crate::println!("[acltest] read-only write => {}", if r_wr.is_err() { "EACCES(deny) OK" } else { "ALLOWED BAD" });
+    // D3 补充：契约条目 ACL 推导验证（register 应只写，driver_name 应只读）
+    if let Ok(mgr) = crate::object::lookup("/object/driver_mgr") {
+        if let Some(e) = mgr.get_entry("register") {
+            crate::println!(
+                "[acltest] contract register acl read={} write={} (read must be false)",
+                e.acl.contains(AclMask::ENTRY_READ),
+                e.acl.contains(AclMask::ENTRY_WRITE)
+            );
+        }
+        if let Some(e) = mgr.get_entry("driver_name") {
+            crate::println!(
+                "[acltest] contract driver_name acl read={} write={} (write must be false)",
+                e.acl.contains(AclMask::ENTRY_READ),
+                e.acl.contains(AclMask::ENTRY_WRITE)
+            );
+        }
+    }
+    let pass = r_empty.is_err() && r_rd.is_ok() && r_wr.is_err();
+    crate::println!("[acltest] {}", if pass { "PASS" } else { "FAIL" });
 }

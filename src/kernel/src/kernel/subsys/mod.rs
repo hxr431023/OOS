@@ -1,9 +1,7 @@
-#![no_std]
 //! 系统控制对象批量注册：落地 specs 定义的各子系统纯控制对象与条目
 //! 依据：storage.md / security.md / service.md / power.md / backup.md /
 //!       pkg.md / update.md / filemgr.md / cmd.md / audio.md / external_dev.md
 //! 全部基于 os.md 内核对象-条目模型；对象为纯控制对象，条目布局与各 .api 契约对齐。
-use alloc::string::String;
 use alloc::sync::Arc;
 use crate::acl::AclMask;
 use crate::object::KObject;
@@ -16,8 +14,8 @@ fn mkobj(path: &str) -> Arc<KObject> {
 
 /// 在对象下创建条目并写入初始状态（内核初始化阶段持有全权限）
 fn mkentry(obj: &Arc<KObject>, name: &str, initial: &str) {
-    if obj.create_entry(name, AclMask::all()).is_ok() {
-        let _ = obj.write_entry(name, initial.as_bytes(), AclMask::all());
+    if obj.create_entry(name, AclMask::default_system()).is_ok() {
+        let _ = obj.write_entry(name, initial.as_bytes(), AclMask::default_system());
     }
 }
 

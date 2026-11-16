@@ -1,4 +1,3 @@
-#![no_std]
 //! PS/2 键盘输入（8042 控制器，端口 0x60/0x64，扫描码集 2，轮询模式）
 //! 完整按键映射：字母大小写、数字、全部标点、Shift 组合、回车/退格/空格/Tab
 use core::sync::atomic::{AtomicBool, Ordering};

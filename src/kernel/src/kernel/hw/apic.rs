@@ -1,4 +1,3 @@
-#![no_std]
 //! APIC 中断控制器（x86-64）
 use x86_64::registers::model_specific::Msr;
 

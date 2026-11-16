@@ -1,4 +1,3 @@
-#![no_std]
 //! 内核时间源（TSC + APIC timer）
 use core::sync::atomic::{AtomicU64, Ordering};
 

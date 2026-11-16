@@ -1,4 +1,3 @@
-#![no_std]
 //! CFF (Compact Font Format) 解析与 Type2 charstring 解释（font.md 字形轮廓来源）
 //! 思源黑体等 OTF 用 PostScript(CFF) 轮廓封装，需解析 CFF 表 + CharStrings + 子程序，
 //! 解释 Type2 charstring 得到轮廓（线段 + 三次贝塞尔），供光栅化。
@@ -395,7 +394,6 @@ fn interpret_rec(
                 let mut k = 0;
                 if n % 2 != 0 {
                     // 有 width
-                    k = 1;
                 }
                 while k + 1 < n {
                     *px += stack[k];
@@ -533,11 +531,11 @@ fn interpret_rec(
             25 => {
                 // rlinecurve: 先 lineto 再 curveto
                 let n = stack.len();
+                let mut k = 0;
                 // 最后 6 个是 curveto
                 if n >= 6 {
                     let curve_start = n - 6;
-                    let mut k = 0;
-                    while k < curve_start {
+                        while k < curve_start {
                         *px += stack[k];
                         *py += stack[k + 1];
                         out.push(PathPoint { x: *px, y: *py, on: true });
@@ -560,12 +558,10 @@ fn interpret_rec(
             26 => {
                 // vvcurveto: dy1 dx2 dy2 dx3 dy3 ...（dx1 可选）
                 let n = stack.len();
-                let mut k = 0;
                 let mut kk = 0;
                 if n % 4 == 1 {
                     // 有 dx1
                     *px += stack[0];
-                    k = 1;
                 }
                 while kk + 3 < n {
                     let dx1 = 0;

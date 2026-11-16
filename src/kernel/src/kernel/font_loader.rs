@@ -1,4 +1,3 @@
-#![no_std]
 //! 字体加载器（font.md 字体子系统——第一文件）
 //! 负责：加载字体文件字节流 → 识别公开字体格式（font.md §2 完整清单）
 //!        → 解析统一字形模型（font.md §1/§5），供字符映射器与 GUI 渲染使用。
@@ -18,6 +17,7 @@ pub enum FontFormat {
     TrueTypeCollection,// .ttc
     Type1,             // .pfb / .pfa
     Bitmap,            // .fon / .fnt
+    Lerf,              // .lerf 语言资源字源（font.md §5）
     Unknown,
 }
 
@@ -32,6 +32,7 @@ impl FontFormat {
             FontFormat::TrueTypeCollection => "TrueTypeCollection",
             FontFormat::Type1 => "Type1/PostScript",
             FontFormat::Bitmap => "Bitmap",
+            FontFormat::Lerf => "LERF",
             FontFormat::Unknown => "Unknown",
         }
     }
@@ -45,6 +46,7 @@ impl FontFormat {
             FontFormat::TrueTypeCollection => "ttc",
             FontFormat::Type1 => "pfb/pfa",
             FontFormat::Bitmap => "fon/fnt",
+            FontFormat::Lerf => "lerf",
             FontFormat::Unknown => "?",
         }
     }
@@ -56,6 +58,10 @@ pub fn detect_format(data: &[u8]) -> FontFormat {
         return FontFormat::Unknown;
     }
     let d = &data[..4];
+    // .lerf 语言资源文件：首行魔数 "LERF."（; 分割编码）
+    if data.len() >= 5 && &data[..5] == b"LERF." {
+        return FontFormat::Lerf;
+    }
     // TrueType: 0x00010000；OpenType: "OTTO"；TrueTypeCollection: "ttcf"
     if d == [0x00, 0x01, 0x00, 0x00] {
         return FontFormat::TrueType;
@@ -123,6 +129,26 @@ pub fn load_font(data: &[u8]) -> Result<LoadedFont, &'static str> {
     let format = detect_format(data);
     if format == FontFormat::Unknown {
         return Err("unknown font format");
+    }
+    if format == FontFormat::Lerf {
+        // .lerf 程序标识符区（第 2–3 行）：图标/字样/哈希，取非空行作为字源标识
+        let text = core::str::from_utf8(data).unwrap_or("");
+        let mut lines = text.lines();
+        let _magic = lines.next();
+        let id1 = lines.next().unwrap_or("");
+        let id2 = lines.next().unwrap_or("");
+        let ident = if !id1.trim().is_empty() { id1.trim() } else { id2.trim() };
+        return Ok(LoadedFont {
+            info: FontInfo {
+                family: ident.to_string(),
+                format,
+                num_glyphs: 0,
+                units_per_em: 0,
+                num_tables: 0,
+            },
+            data: data.to_vec(),
+            glyphs: Vec::new(),
+        });
     }
     let (num_tables, upem) = parse_sfnt(data);
     let family = read_name_table(data).unwrap_or_else(|| format!("font-{:?}", format));

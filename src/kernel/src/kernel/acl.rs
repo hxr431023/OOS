@@ -1,4 +1,3 @@
-#![no_std]
 use bitflags::bitflags;
 
 bitflags! {
@@ -16,4 +15,15 @@ pub fn init() {
 
 pub fn check_perm(have: AclMask, need: AclMask) -> bool {
     have.contains(need)
+}
+
+impl AclMask {
+    /// 普通用户：可读可写，不可创建/删除条目
+    pub fn default_user() -> Self {
+        AclMask::ENTRY_READ | AclMask::ENTRY_WRITE
+    }
+    /// 系统级：读/写 + 创建/删除
+    pub fn default_system() -> Self {
+        AclMask::ENTRY_READ | AclMask::ENTRY_WRITE | AclMask::CREATE_ENTRY | AclMask::DELETE_ENTRY
+    }
 }

@@ -1,4 +1,3 @@
-#![no_std]
 //! 驱动管理器（driver.md）
 //! 用户态驱动注册模型：驱动向 /object/driver_mgr 创建注册条目完成注册
 //! 内核负责MMIO页表映射、IOMMU配置；驱动崩溃自动复位硬件
@@ -6,7 +5,6 @@
 pub mod ata;
 use crate::sync::Mutex;
 use crate::glue_layer::SysErr;
-use crate::hw::pci::PciDevice;
 use hashbrown::HashMap;
 use alloc::string::String;
 use alloc::sync::Arc;

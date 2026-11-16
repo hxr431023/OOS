@@ -1,4 +1,3 @@
-#![no_std]
 //! 网络子系统（net.md）
 //! 套接字是IO流内核对象；TCP/UDP协议栈在内核；支持tap虚拟网卡
 use crate::sync::Mutex;

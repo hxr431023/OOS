@@ -1,4 +1,3 @@
-#![no_std]
 use crate::acl::AclMask;
 use crate::sync::{Mutex, Once};
 use crate::glue_layer::SysErr;
@@ -6,7 +5,7 @@ use hashbrown::HashMap;
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use core::sync::atomic::{AtomicUsize, Ordering};
+use core::sync::atomic::AtomicUsize;
 
 #[derive(Debug)]
 pub struct KEntry {
@@ -14,17 +13,21 @@ pub struct KEntry {
     pub acl: AclMask,
     pub lib_inst_id: u64,
     pub data: Mutex<Option<alloc::vec::Vec<u8>>>,
-    pub waiters: Mutex<alloc::collections::VecDeque<u64>>,
+    pub waiters: crate::ipc::WaitQueue,
+    /// 契约 internal_mapping 元数据（D6 修订：不得丢弃）
+    pub internal_mapping: String,
 }
 
 impl KEntry {
-    pub fn new(name: &str) -> Self {
+    /// D3 补充：不再有统一默认值，ACL 由调用方显式传入
+    pub fn new(name: &str, acl: AclMask) -> Self {
         Self {
             name: String::from(name),
-            acl: AclMask::all(),
+            acl,
             lib_inst_id: 0,
             data: Mutex::new(None),
-            waiters: Mutex::new(alloc::collections::VecDeque::new()),
+            waiters: crate::ipc::WaitQueue::new(),
+            internal_mapping: String::new(),
         }
     }
 }
@@ -33,7 +36,6 @@ impl KEntry {
 pub struct KObject {
     pub path: String,
     pub acl: AclMask,
-    pub refcnt: AtomicUsize,
     pub entries: Mutex<HashMap<String, Arc<KEntry>>>,
     pub children: Mutex<HashMap<String, Arc<KObject>>>,
 }
@@ -42,28 +44,41 @@ impl KObject {
     pub fn new(path: &str) -> Self {
         Self {
             path: String::from(path),
-            acl: AclMask::all(),
-            refcnt: AtomicUsize::new(1),
+            acl: AclMask::ENTRY_READ,
             entries: Mutex::new(HashMap::new()),
             children: Mutex::new(HashMap::new()),
         }
     }
 
+    /// 非契约来源条目（subsys 手工注册）：默认只读（D3 补充）
     pub fn create_entry(&self, name: &str, caller_acl: AclMask) -> Result<Arc<KEntry>, SysErr> {
-        if !caller_acl.contains(AclMask::CREATE_ENTRY) {
+        self.create_entry_with_acl(name, caller_acl, AclMask::ENTRY_READ, "")
+    }
+
+    /// 契约来源条目：ACL 由契约推导，internal_mapping 存入元数据（D6 修订）
+    pub fn create_entry_with_acl(
+        &self,
+        name: &str,
+        caller_acl: AclMask,
+        entry_acl: AclMask,
+        internal_mapping: &str,
+    ) -> Result<Arc<KEntry>, SysErr> {
+        if !crate::acl::check_perm(caller_acl, AclMask::CREATE_ENTRY) {
             return Err(SysErr::EACCES);
         }
         let mut entries = self.entries.lock();
         if entries.contains_key(name) {
             return Err(SysErr::EINVAL);
         }
-        let entry = Arc::new(KEntry::new(name));
+        let mut entry = KEntry::new(name, entry_acl);
+        entry.internal_mapping = String::from(internal_mapping);
+        let entry = Arc::new(entry);
         entries.insert(String::from(name), entry.clone());
         Ok(entry)
     }
 
     pub fn delete_entry(&self, name: &str, caller_acl: AclMask) -> Result<(), SysErr> {
-        if !caller_acl.contains(AclMask::DELETE_ENTRY) {
+        if !crate::acl::check_perm(caller_acl, AclMask::DELETE_ENTRY) {
             return Err(SysErr::EACCES);
         }
         let mut entries = self.entries.lock();
@@ -81,7 +96,7 @@ impl KObject {
 
     pub fn read_entry(&self, name: &str, caller_acl: AclMask) -> Result<alloc::vec::Vec<u8>, SysErr> {
         let entry = self.get_entry(name).ok_or(SysErr::ENOENT)?;
-        if !caller_acl.contains(AclMask::ENTRY_READ) && !entry.acl.contains(AclMask::ENTRY_READ) {
+        if !crate::acl::check_perm(caller_acl, AclMask::ENTRY_READ) {
             return Err(SysErr::EACCES);
         }
         // 实时翻译粘合层：如果有lib_inst_id，实时调用第三方库
@@ -91,9 +106,25 @@ impl KObject {
         Ok(entry.data.lock().clone().unwrap_or_default())
     }
 
+    /// D13：把条目数据写入调用方提供的缓冲区，避免整块 clone/分配
+    pub fn read_entry_into(&self, name: &str, caller_acl: AclMask, dst: &mut [u8]) -> Result<usize, SysErr> {
+        let entry = self.get_entry(name).ok_or(SysErr::ENOENT)?;
+        if !crate::acl::check_perm(caller_acl, AclMask::ENTRY_READ) {
+            return Err(SysErr::EACCES);
+        }
+        if entry.lib_inst_id != 0 {
+            return Err(SysErr::EINVAL);
+        }
+        let data = entry.data.lock();
+        let src = data.as_ref().ok_or(SysErr::ENOENT)?;
+        let n = core::cmp::min(src.len(), dst.len());
+        dst[..n].copy_from_slice(&src[..n]);
+        Ok(n)
+    }
+
     pub fn write_entry(&self, name: &str, data: &[u8], caller_acl: AclMask) -> Result<(), SysErr> {
         let entry = self.get_entry(name).ok_or(SysErr::ENOENT)?;
-        if !caller_acl.contains(AclMask::ENTRY_WRITE) && !entry.acl.contains(AclMask::ENTRY_WRITE) {
+        if !crate::acl::check_perm(caller_acl, AclMask::ENTRY_WRITE) {
             return Err(SysErr::EACCES);
         }
         // 实时翻译粘合层
@@ -101,10 +132,10 @@ impl KObject {
             return crate::glue_layer::glue_entry_write(entry.lib_inst_id, data);
         }
         *entry.data.lock() = Some(data.to_vec());
-        // 唤醒等待者
-        let mut waiters = entry.waiters.lock();
-        while let Some(_pid) = waiters.pop_front() {
-            // wake_process(pid);
+        // D5：统一复用 ipc::WaitQueue，写入成功后唤醒全部等待者
+        let woke = entry.waiters.wake_all();
+        if woke > 0 {
+            crate::println!("[ipc] woke {} waiter(s)", woke);
         }
         Ok(())
     }

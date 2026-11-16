@@ -1,4 +1,3 @@
-#![no_std]
 //! .api 契约桥接层（.api.md）
 //! 解析机器可读 .api 契约文件，做参数校验、ACL、限流、审计、字段隐藏
 use crate::sync::Mutex;

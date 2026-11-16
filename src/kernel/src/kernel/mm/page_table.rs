@@ -1,9 +1,7 @@
-#![no_std]
 //! x86-64 四级页表管理（memory.md）
 //! 高半内核映射，支持用户态/内核态地址空间分离
 use crate::sync::Mutex;
 use crate::glue_layer::SysErr;
-use alloc::vec::Vec;
 
 bitflags::bitflags! {
     pub struct PageFlags: u64 {
@@ -122,11 +120,59 @@ impl AddressSpace {
         Ok(())
     }
 
-    /// 取消映射
+    /// 取消映射（D10）：定位 PT 条目、校验 present、清零、invlpg，返回原物理地址
     pub fn unmap(&mut self, virt: u64) -> Result<u64, SysErr> {
-        // 简化：找到PT条目，清零，返回物理地址
-        let _ = virt;
-        Ok(0)
+        let pml4_idx = (virt >> 39) & 0x1FF;
+        let pdpt_idx = (virt >> 30) & 0x1FF;
+        let pd_idx = (virt >> 21) & 0x1FF;
+        let pt_idx = (virt >> 12) & 0x1FF;
+        let pml4 = unsafe { &mut *self.pml4 };
+        if !pml4.entries[pml4_idx as usize].is_present() { return Err(SysErr::ENOENT); }
+        let pdpt = pml4.entries[pml4_idx as usize].addr() as *mut PageTable;
+        let pdpt_ref = unsafe { &mut *pdpt };
+        if !pdpt_ref.entries[pdpt_idx as usize].is_present() { return Err(SysErr::ENOENT); }
+        let pd = pdpt_ref.entries[pdpt_idx as usize].addr() as *mut PageTable;
+        let pd_ref = unsafe { &mut *pd };
+        let pd_e = pd_ref.entries[pd_idx as usize];
+        if pd_e.is_present() && pd_e.flags().contains(PageFlags::HUGE_PAGE) {
+            return Err(SysErr::EINVAL);
+        }
+        if !pd_e.is_present() { return Err(SysErr::ENOENT); }
+        let pt = pd_e.addr() as *mut PageTable;
+        let pt_ref = unsafe { &mut *pt };
+        let e = pt_ref.entries[pt_idx as usize];
+        if !e.is_present() { return Err(SysErr::ENOENT); }
+        let phys = e.addr();
+        pt_ref.entries[pt_idx as usize] = PageTableEntry(0);
+        unsafe { core::arch::asm!("invlpg [{}]", in(reg) virt); }
+        Ok(phys)
+    }
+
+    /// 映射 2MB 大页（D9：PD 层 HUGE_PAGE，避免为每 4KB 建 PT）
+    pub fn map_huge(&mut self, virt: u64, phys: u64, flags: PageFlags) -> Result<(), SysErr> {
+        let pml4_idx = (virt >> 39) & 0x1FF;
+        let pdpt_idx = (virt >> 30) & 0x1FF;
+        let pd_idx = (virt >> 21) & 0x1FF;
+        let pml4 = unsafe { &mut *self.pml4 };
+        if !pml4.entries[pml4_idx as usize].is_present() {
+            let pdpt_phys = crate::memory::hpa_alloc_page().ok_or(SysErr::EINVAL)?;
+            unsafe { core::ptr::write_bytes(pdpt_phys as *mut u8, 0, PAGE_SIZE); }
+            pml4.entries[pml4_idx as usize] = PageTableEntry::new(pdpt_phys as u64,
+                PageFlags::PRESENT | PageFlags::WRITABLE | PageFlags::USER);
+        }
+        let pdpt = pml4.entries[pml4_idx as usize].addr() as *mut PageTable;
+        let pdpt_ref = unsafe { &mut *pdpt };
+        if !pdpt_ref.entries[pdpt_idx as usize].is_present() {
+            let pd_phys = crate::memory::hpa_alloc_page().ok_or(SysErr::EINVAL)?;
+            unsafe { core::ptr::write_bytes(pd_phys as *mut u8, 0, PAGE_SIZE); }
+            pdpt_ref.entries[pdpt_idx as usize] = PageTableEntry::new(pd_phys as u64,
+                PageFlags::PRESENT | PageFlags::WRITABLE | PageFlags::USER);
+        }
+        let pd = pdpt_ref.entries[pdpt_idx as usize].addr() as *mut PageTable;
+        let pd_ref = unsafe { &mut *pd };
+        pd_ref.entries[pd_idx as usize] = PageTableEntry::new(phys, flags | PageFlags::HUGE_PAGE);
+        unsafe { core::arch::asm!("invlpg [{}]", in(reg) virt); }
+        Ok(())
     }
 
     /// 切换到该地址空间（写CR3）
@@ -143,14 +189,21 @@ static KERNEL_AS: Mutex<Option<AddressSpace>> = Mutex::new(None);
 pub fn init() {
     // 内核高半映射：0xFFFFFFFF80000000 映射到物理 0
     let mut as_ = AddressSpace::new().expect("kernel address space");
-    // 映射内核前16MB
-    for i in 0..(16 * 1024 * 1024 / PAGE_SIZE) {
-        let phys = (i * PAGE_SIZE) as u64;
-        let virt = 0xFFFFFFFF80000000 + phys;
-        let _ = as_.map(virt, phys,
+    // D9：覆盖到 __kernel_end + 8MB 余量，使用 2MB 大页
+    let kend = crate::memory::kernel_end_addr() as u64;
+    let map_end = ((kend + 0x800000) + 0xFFF) & !0xFFF;
+    let mut addr = 0u64;
+    let mut count = 0u64;
+    while addr < map_end {
+        let virt = 0xFFFFFFFF80000000u64 + addr;
+        let _ = as_.map_huge(virt, addr,
             PageFlags::PRESENT | PageFlags::WRITABLE | PageFlags::GLOBAL);
+        addr += 0x200000;
+        count += 1;
     }
     *KERNEL_AS.lock() = Some(as_);
+    crate::println!("[mm] high-half mapped 0xFFFFFFFF80000000-0x{:X} size={}MB, huge pages={}",
+        0xFFFFFFFF80000000u64 + map_end, map_end / (1024 * 1024), count);
     crate::println!("page table ready, kernel high-half mapped");
 }
 

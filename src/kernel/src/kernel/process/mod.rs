@@ -1,7 +1,5 @@
-#![no_std]
 //! 进程与线程管理
 use crate::sync::Mutex;
-use crate::glue_layer::SysErr;
 use hashbrown::HashMap;
 use alloc::string::String;
 use alloc::sync::Arc;

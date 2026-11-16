@@ -16,7 +16,7 @@ use uefi::proto::media::block::BlockIO;
 use uefi::table::boot::MemoryType;
 use uefi::proto::console::gop::{GraphicsOutput, PixelFormat};
 
-const KERNEL_PATH: &str = "\\EFI\\hybrid\\kernel.elf";
+const KERNEL_PATH: &str = "\\system\\boot\\kernel.elf";
 
 /// 与内核 memory::UefiMemoryMap 布局一致的 repr(C) 结构
 #[repr(C)]
@@ -207,6 +207,36 @@ fn efi_main(_image: Handle, mut st: SystemTable<Boot>) -> Status {
     // 2.8 在退出启动服务前，构建 bootloader 自己的 identity 分页（0-4GB RWX，2MB 大页）
     let cr3 = setup_identity_paging();
 
+    // 2.9 退出启动服务前获取真实 UEFI memory map，记录可用物理区间（D2）
+    //     exit 后 boot services 内存被释放，所以必须在此之前读完 descriptor。
+    let mut ram_start = 0x100000u64;
+    let mut ram_end = 0u64;
+    let mut mm_buf = alloc::vec![0u8; 64 * 1024];
+    if let Ok(mm) = st.boot_services().memory_map(&mut mm_buf) {
+        for d in mm.entries() {
+            // 只统计 Conventional（可自由分配）内存，排除 reserved/MMIO/高地址空洞
+            if d.ty != MemoryType::CONVENTIONAL {
+                continue;
+            }
+            let s = d.phys_start;
+            let e = s.saturating_add(d.page_count.saturating_mul(4096));
+            if s >= 0x100000 && s < ram_start {
+                ram_start = s;
+            }
+            if e > ram_end && e <= 0x1_0000_0000 {
+                ram_end = e;
+            }
+        }
+    }
+    if ram_end <= ram_start {
+        ram_end = 0x4000_0000;
+    }
+    unsafe {
+        MEM_INFO.ram_start = ram_start;
+        MEM_INFO.ram_end = ram_end;
+    }
+    sprint("[RMEM]\n");
+
     // 3. 退出启动服务
     let _ = st.exit_boot_services(MemoryType::LOADER_DATA);
     sprint("[EXIT]\n");
@@ -253,6 +283,9 @@ fn efi_main(_image: Handle, mut st: SystemTable<Boot>) -> Status {
         core::ptr::write_volatile(0x800018 as *mut u64, core::ptr::read_volatile(&G_FB_STRIDE as *const u32) as u64);
         core::ptr::write_volatile(0x800020 as *mut u64, core::ptr::read_volatile(&G_FB_BPP as *const u32) as u64);
         core::ptr::write_volatile(0x800028 as *mut u64, core::ptr::read_volatile(&G_FB_FMT as *const u32) as u64);
+        // D2：真实可用物理区间（0x800030 / 0x800038，exit 后保留）
+        core::ptr::write_volatile(0x800030 as *mut u64, core::ptr::read_volatile(&MEM_INFO.ram_start as *const u64));
+        core::ptr::write_volatile(0x800038 as *mut u64, core::ptr::read_volatile(&MEM_INFO.ram_end as *const u64));
     }
     unsafe {
         // 回读确认 0x800000 写入生效（保留真实 G_FB_* 值，不覆盖）
@@ -385,15 +418,16 @@ fn load_kernel(st: &SystemTable<Boot>) -> Result<Vec<u8>, ()> {
         }
         let root_ext = le32(&pvd[158..162]);
         let root_size = le32(&pvd[166..170]);
-        let efi = match find_in_dir(&mut blk, media_id, root_ext, root_size, "EFI") {
+        // boot 目录已挪到 system 下：/system/boot/KERNEL.ELF
+        let sysdir = match find_in_dir(&mut blk, media_id, root_ext, root_size, "SYSTEM") {
             Some((e, s, true)) => (e, s),
             _ => continue,
         };
-        let hyb = match find_in_dir(&mut blk, media_id, efi.0, efi.1, "HYBRID") {
+        let bootdir = match find_in_dir(&mut blk, media_id, sysdir.0, sysdir.1, "BOOT") {
             Some((e, s, true)) => (e, s),
             _ => continue,
         };
-        let kern = match find_in_dir(&mut blk, media_id, hyb.0, hyb.1, "KERNEL.ELF") {
+        let kern = match find_in_dir(&mut blk, media_id, bootdir.0, bootdir.1, "KERNEL.ELF") {
             Some((e, s, false)) => (e, s),
             _ => continue,
         };

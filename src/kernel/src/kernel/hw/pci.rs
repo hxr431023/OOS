@@ -1,4 +1,3 @@
-#![no_std]
 //! PCIe 总线枚举（boot.md：内核早期枚举PCI设备，预先创建硬件对象）
 use crate::sync::{Mutex, Lazy};
 use crate::glue_layer::SysErr;
@@ -54,7 +53,7 @@ impl PciDevice {
 /// 读取 PCI 配置空间双字
 fn pci_config_read(addr: &PciAddr, offset: u8) -> u32 {
     // 0xCF8/0xCFC 是 IO 端口，用 inl/outl 访问（boot 后 MMIO 映射失效会导致枚举返回 0 设备）
-    use x86_64::instructions::port::{Port, PortWrite, PortRead};
+    use x86_64::instructions::port::Port;
     let mut acfg = Port::<u32>::new(0xCF8);
     let mut dcfg = Port::<u32>::new(0xCFC);
     unsafe {

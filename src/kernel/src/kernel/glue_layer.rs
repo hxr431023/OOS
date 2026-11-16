@@ -1,4 +1,3 @@
-#![no_std]
 use crate::sync::{Mutex, Lazy};
 use hashbrown::HashMap;
 use alloc::vec::Vec;
@@ -9,15 +8,8 @@ pub enum SysErr {
     Ok = 0,
     EACCES = 1,
     ENOENT = 2,
+    EAGAIN = 11,
     EINVAL = 22,
-}
-
-#[derive(serde::Serialize, serde::Deserialize, Debug)]
-pub struct GlueStatus {
-    pub inst_id: u64,
-    pub state: u32,
-    pub stat_a: u64,
-    pub stat_b: u64,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
@@ -35,6 +27,7 @@ fn lib_inst_table() -> &'static Mutex<HashMap<u64, ()>> {
 
 pub fn init() {
     crate::println!("glue translation layer init done");
+    crate::api_parser::load_all();
 }
 
 pub fn alloc_inst_id() -> u64 {
@@ -49,13 +42,9 @@ pub fn glue_entry_read(lib_inst_id: u64) -> Result<Vec<u8>, SysErr> {
     if !lib_inst_table().lock().contains_key(&lib_inst_id) {
         return Err(SysErr::ENOENT);
     }
-    let our_status = GlueStatus {
-        inst_id: lib_inst_id,
-        state: 1,
-        stat_a: 100,
-        stat_b: 200,
-    };
-    serde_json::to_vec(&our_status).map_err(|_| SysErr::EINVAL)
+    // D6：实例无真实后端绑定时不得返回编造数据
+    crate::println!("[glue] instance {} has no bound backend, read denied", lib_inst_id);
+    Err(SysErr::ENOENT)
 }
 
 pub fn glue_entry_write(lib_inst_id: u64, input: &[u8]) -> Result<(), SysErr> {
@@ -65,7 +54,7 @@ pub fn glue_entry_write(lib_inst_id: u64, input: &[u8]) -> Result<(), SysErr> {
         return Err(SysErr::ENOENT);
     }
     match cmd {
-        GlueCommand::DoWork(_arg) => {}
+        GlueCommand::DoWork(_arg) => return Err(SysErr::EINVAL),
         GlueCommand::Close => {
             table.remove(&lib_inst_id);
         }

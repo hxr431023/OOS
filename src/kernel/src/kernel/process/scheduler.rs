@@ -1,4 +1,3 @@
-#![no_std]
 //! CPU 调度器（cpu.md）
 //! 支持 P/M/E 异构大小核，按进程类别分配权重，硬配额节流
 use crate::sync::Mutex;

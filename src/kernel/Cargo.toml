@@ -12,7 +12,6 @@ path = "src/kernel/main.rs"
 x86_64 = "0.15.0"
 
 # 内存底座（供给所有需要alloc的库）
-buddy-alloc = "0.6.0"
 
 # SMP同步原语底座
 spin = { version = "0.9.8", features = ["mutex", "rwlock", "once"] }
@@ -28,7 +27,6 @@ serde = { version = "1.0", default-features = false, features = ["derive", "allo
 serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
 
 # 时间抽象（底层TSC/APIC读取代码自己写粘合层）
-embedded-time = "0.12.1"
 
 [profile.dev]
 panic = "abort"

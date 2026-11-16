@@ -1,4 +1,3 @@
-#![no_std]
 //! GOP framebuffer 显示层（方案A）：内核直接往 UEFI framebuffer 写像素绘制字符。
 //! 无 GOP（base=0，BIOS/legacy）时由 vga.rs 回退 0xB8000 文本模式。
 use crate::font8x8::FONT8X8;
@@ -22,7 +21,7 @@ fn put_pixel(
     y: usize,
     stride: usize,
     bpp: usize,
-    fmt: u32,
+    _fmt: u32,
     r: u8,
     g: u8,
     b: u8,
@@ -39,7 +38,7 @@ fn put_pixel(
 }
 
 /// 串口诊断：直接向 COM1 输出无符号整数十六进制（早于显示栈就绪，不能走 println）
-fn ser_hex(mut v: usize) {
+fn ser_hex(v: usize) {
     unsafe {
         core::arch::asm!("mov dx, 0x3F8", "mov al, '#'", "out dx, al", options(nomem, nostack));
         for shift in (0..16).rev() {
@@ -273,7 +272,7 @@ pub fn put_char(c: u8) {
             let row = idx / cols;
             let col = idx % cols;
             if cp >= 0x20 {
-                draw_glyph(&f, base, col * CHAR_W, row * CHAR_H, &FONT8X8[(cp as usize - 0x20)]);
+                draw_glyph(&f, base, col * CHAR_W, row * CHAR_H, &FONT8X8[cp as usize - 0x20]);
             }
             idx += 1;
         } else {

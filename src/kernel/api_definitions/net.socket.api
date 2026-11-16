@@ -1,22 +1,26 @@
-{
-  "name": "net.socket",
-  "version": 1,
-  "internal_path": "/object/net/sock",
-  "read_fields": [
-    {"name": "local_port", "field_type": "u16", "internal_mapping": "status.local_port", "readable": true, "writable": false},
-    {"name": "remote_port", "field_type": "u16", "internal_mapping": "status.remote_port", "readable": true, "writable": false},
-    {"name": "local_addr", "field_type": "u32", "internal_mapping": "status.local_addr", "readable": true, "writable": false},
-    {"name": "remote_addr", "field_type": "u32", "internal_mapping": "status.remote_addr", "readable": true, "writable": false},
-    {"name": "state", "field_type": "u8", "internal_mapping": "status.state", "readable": true, "writable": false},
-    {"name": "rx_bytes", "field_type": "u64", "internal_mapping": "stats.rx_bytes", "readable": true, "writable": false},
-    {"name": "tx_bytes", "field_type": "u64", "internal_mapping": "stats.tx_bytes", "readable": true, "writable": false}
-  ],
-  "write_fields": [
-    {"name": "connect", "field_type": "command", "internal_mapping": "ctl.connect", "readable": false, "writable": true},
-    {"name": "listen", "field_type": "command", "internal_mapping": "ctl.listen", "readable": false, "writable": true},
-    {"name": "close", "field_type": "command", "internal_mapping": "ctl.close", "readable": false, "writable": true},
-    {"name": "bind", "field_type": "command", "internal_mapping": "ctl.bind", "readable": false, "writable": true}
-  ],
-  "rate_limit": {"max_calls_per_sec": 10000},
-  "audit": true
-}
+# net.socket 对外接口契约（片段格式）
+version = 1.0
+target = net.socket
+env = rust
+exec = /system/kernel/net
+internal_loc = map + symbol + register
+min_os_version = 1.0
+global_acl = kernel
+global_limit = 10000次/秒
+
+object /object/net/sock net_socket
+
+# ---- 只读条目 ----
+net_socket: local_port { } /object/net/sock/status/local_port
+net_socket: remote_port { } /object/net/sock/status/remote_port
+net_socket: local_addr { } /object/net/sock/status/local_addr
+net_socket: remote_addr { } /object/net/sock/status/remote_addr
+net_socket: state { } /object/net/sock/status/state
+net_socket: rx_bytes { } /object/net/sock/stats/rx_bytes
+net_socket: tx_bytes { } /object/net/sock/stats/tx_bytes
+
+# ---- 可写控制条目 ----
+net_socket: connect { self.write_connect() } /object/net/sock/ctl/connect
+net_socket: listen { self.write_listen() } /object/net/sock/ctl/listen
+net_socket: close { self.write_close() } /object/net/sock/ctl/close
+net_socket: bind { self.write_bind() } /object/net/sock/ctl/bind

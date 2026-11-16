@@ -1,8 +1,8 @@
-# 构建产物
-target/
-build/
-*.iso
-*.efi
-*.o
-*.a
+/target/
+/build/
+/bootloader/target/
+/netstack/target/
 *.log
+*.iso
+*.png
+build_out*.txt

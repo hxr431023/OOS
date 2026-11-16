@@ -1,4 +1,3 @@
-#![no_std]
 use crate::sync::Mutex;
 use hashbrown::HashMap;
 use alloc::string::String;

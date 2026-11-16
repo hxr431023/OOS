@@ -4,7 +4,7 @@
 //!   - PIO：端口忙等轮询（慢，VirtualBox 下大文件易卡死）；
 //!   - Bus Master IDE DMA（BMIDE）：经 PCI BAR4 编程 PRDT，数据由控制器直写内存，
 //!     大幅减少端口访问，根治大文件 PIO 卡死。DMA 不可用时回退 PIO。
-use x86_64::instructions::port::{Port, PortRead, PortWrite};
+use x86_64::instructions::port::Port;
 use crate::fs::iso9660::{BlockRead, SECTOR};
 use crate::glue_layer::SysErr;
 

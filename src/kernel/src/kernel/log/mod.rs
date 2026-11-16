@@ -1,11 +1,9 @@
-#![no_std]
 //! 日志子系统（log.md）
 //! 内核环形内存缓冲 + 用户态守护进程落盘；分级日志 + 独立审计日志
 use crate::sync::Mutex;
 use crate::hw::time;
 use alloc::string::String;
 use alloc::collections::VecDeque;
-use alloc::format;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]

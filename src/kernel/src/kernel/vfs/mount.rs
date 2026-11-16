@@ -1,4 +1,3 @@
-#![no_std]
 use alloc::string::String;
 use alloc::sync::Arc;
 use super::inode::Inode;

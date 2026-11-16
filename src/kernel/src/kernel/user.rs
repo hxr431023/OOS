@@ -1,4 +1,3 @@
-#![no_std]
 //! 用户态 (ring3) 基础设施骨架：GDT + TSS + IDT(int 0x80 门) + 进 ring3 切换
 use core::arch::asm;
 
@@ -252,7 +251,6 @@ pub unsafe fn dump_user_diag() {
 // ---- int 0x80 系统调用入口（ring3 -> ring0）----
 core::arch::global_asm!(
     r#"
-    .intel_syntax noprefix
     .macro PUSHALL
         push rax
         push rcx
@@ -306,7 +304,6 @@ core::arch::global_asm!(
         out dx, al
         hlt
         jmp exc_common
-    .att_syntax prefix
     "#
 );
 
@@ -377,13 +374,11 @@ pub unsafe fn switch_to_user() -> ! {
 // 用户栈（ring3）
 core::arch::global_asm!(
     r#"
-    .intel_syntax noprefix
     .section .bss
     .align 16
     user_stack:
         .space 8192
     .global user_stack_top
     user_stack_top:
-    .att_syntax prefix
     "#
 );

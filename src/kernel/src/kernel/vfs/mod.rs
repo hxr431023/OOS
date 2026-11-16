@@ -1,4 +1,3 @@
-#![no_std]
 //! VFS 虚拟文件系统
 //! 两套后端：磁盘真实文件系统 + 内核IO流对象内存虚拟节点
 //! 遵循 fs.md 设计
@@ -136,12 +135,12 @@ let _ = vfs.create("/system/media", InodeType::Directory);
     );
     let _ = vfs.create("/system/proc/meminfo", InodeType::VirtualNode);
     {
-        let (total, used) = crate::memory::mem_stats();
+        let st = crate::memory::mem_stats();
         let s = alloc::format!(
             "MemTotal:\t{} kB\nMemUsed:\t{} kB\nMemFree:\t{} kB\n",
-            total / 1024,
-            used / 1024,
-            total.saturating_sub(used) / 1024
+            st.total / 1024,
+            st.allocated / 1024,
+            st.free / 1024
         );
         let _ = vfs.write("/system/proc/meminfo", s.as_bytes(), rw);
     }
