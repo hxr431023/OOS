@@ -1,0 +1,26 @@
+# net.socket 对外接口契约（片段格式）
+version = 1.0
+target = net.socket
+env = rust
+exec = /system/kernel/net
+internal_loc = map + symbol + register
+min_os_version = 1.0
+global_acl = kernel
+global_limit = 10000次/秒
+
+object /object/net/sock net_socket
+
+# ---- 只读条目 ----
+net_socket: local_port { } /object/net/sock/status/local_port
+net_socket: remote_port { } /object/net/sock/status/remote_port
+net_socket: local_addr { } /object/net/sock/status/local_addr
+net_socket: remote_addr { } /object/net/sock/status/remote_addr
+net_socket: state { } /object/net/sock/status/state
+net_socket: rx_bytes { } /object/net/sock/stats/rx_bytes
+net_socket: tx_bytes { } /object/net/sock/stats/tx_bytes
+
+# ---- 可写控制条目 ----
+net_socket: connect { self.write_connect() } /object/net/sock/ctl/connect
+net_socket: listen { self.write_listen() } /object/net/sock/ctl/listen
+net_socket: close { self.write_close() } /object/net/sock/ctl/close
+net_socket: bind { self.write_bind() } /object/net/sock/ctl/bind

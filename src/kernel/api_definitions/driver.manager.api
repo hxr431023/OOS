@@ -1,0 +1,25 @@
+# driver.manager 对外接口契约（片段格式）
+version = 1.0
+target = driver.manager
+env = rust
+exec = /system/kernel/driver
+internal_loc = map + symbol + register
+min_os_version = 1.0
+global_acl = kernel
+global_limit = 50次/秒
+
+object /object/driver_mgr driver_manager
+
+# ---- 只读条目 ----
+driver_manager: driver_name { } /object/driver_mgr/info/name
+driver_manager: pid { } /object/driver_mgr/info/pid
+driver_manager: state { } /object/driver_mgr/info/state
+driver_manager: bound_device { } /object/driver_mgr/info/bound_device
+driver_manager: supported_devices { } /object/driver_mgr/info/supported
+
+# ---- 可写控制条目 ----
+driver_manager: register { self.write_register() } /object/driver_mgr/ctl/register
+driver_manager: unregister { self.write_unregister() } /object/driver_mgr/ctl/unregister
+driver_manager: bind_device { self.write_bind_device() } /object/driver_mgr/ctl/bind
+driver_manager: unbind_device { self.write_unbind_device() } /object/driver_mgr/ctl/unbind
+driver_manager: reset_device { self.write_reset_device() } /object/driver_mgr/ctl/reset

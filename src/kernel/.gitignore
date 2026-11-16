@@ -1,0 +1,8 @@
+/target/
+/build/
+/bootloader/target/
+/netstack/target/
+*.log
+*.iso
+*.png
+build_out*.txt

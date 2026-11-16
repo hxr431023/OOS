@@ -1,0 +1,29 @@
+# vm.instance 对外接口契约（片段格式）
+version = 1.0
+target = vm.instance
+env = rust
+exec = /system/kernel/vm
+internal_loc = map + symbol + register
+min_os_version = 1.0
+global_acl = kernel
+global_limit = 100次/秒
+
+object /object/vm vm_instance
+
+# ---- 只读条目 ----
+vm_instance: name { } /object/vm/props/name
+vm_instance: state { } /object/vm/props/state
+vm_instance: vcpu_count { } /object/vm/config/vcpu_count
+vm_instance: memory_mb { } /object/vm/config/memory_mb
+vm_instance: vcpu_weight { } /object/vm/config/vcpu_weight
+vm_instance: passthrough_devices { } /object/vm/props/passthrough
+vm_instance: tap_interface { } /object/vm/props/tap
+
+# ---- 可写控制条目 ----
+vm_instance: start { self.write_start() } /object/vm/ctl/start
+vm_instance: pause { self.write_pause() } /object/vm/ctl/pause
+vm_instance: stop { self.write_stop() } /object/vm/ctl/stop
+vm_instance: reset { self.write_reset() } /object/vm/ctl/reset
+vm_instance: snapshot { self.write_snapshot() } /object/vm/ctl/snapshot
+vm_instance: add_passthrough { self.write_add_passthrough() } /object/vm/ctl/add_passthrough
+vm_instance: attach_tap { self.write_attach_tap() } /object/vm/ctl/attach_tap
