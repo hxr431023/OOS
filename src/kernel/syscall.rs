@@ -114,6 +114,7 @@ pub extern "C" fn syscall_dispatch(
         99 => {
             // 用户态(ring3)演示 syscall：证明 int 0x80 从 ring3 进内核执行成功
             crate::println!("USER SYSCALL OK (executed in ring0, from ring3)");
+            crate::user::USER_EXIT_REQUESTED.store(true, core::sync::atomic::Ordering::SeqCst);
             0
         }
         n if n == SyscallNum::OpenObject as u64 => {

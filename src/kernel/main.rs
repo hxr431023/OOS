@@ -1,6 +1,7 @@
 #![no_std]
 #![no_main]
 #![feature(alloc_error_handler)]
+#![feature(naked_functions)]
 #![allow(unsafe_op_in_unsafe_fn)]
 
 extern crate alloc;
@@ -327,6 +328,8 @@ unsafe extern "C" fn _kmain(_uefi_mem_info: *const memory::UefiMemoryMap) {
 
     // 用户态 (ring3) 基础设施：加载 GDT/TSS/IDT（本阶段不进 ring3）
     user::init();
+    unsafe { user::prepare_user(); }
+    println!("[user] ring3 ready (run `ring3` in shell to enter ring3)");
 
     // 进入交互式串口 shell（真正的操作系统：可敲命令、看响应）
     // 显示层就绪后重新清屏白底，覆盖 VirtualBox 早期残留的洋红背景

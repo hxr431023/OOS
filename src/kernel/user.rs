@@ -1,5 +1,15 @@
 //! 用户态 (ring3) 基础设施骨架：GDT + TSS + IDT(int 0x80 门) + 进 ring3 切换
 use core::arch::asm;
+use core::sync::atomic::{AtomicBool, Ordering};
+
+unsafe extern "C" { fn user_return_point(); }
+
+#[unsafe(no_mangle)]
+pub static mut KERNEL_RET: u64 = 0;
+#[unsafe(no_mangle)]
+pub static mut KERNEL_RSP: u64 = 0;
+#[unsafe(no_mangle)]
+pub static USER_EXIT_REQUESTED: AtomicBool = AtomicBool::new(false);
 
 // ---- GDT 布局（64 位）----
 const KCODE: u16 = 0x08;
@@ -251,6 +261,11 @@ pub unsafe fn dump_user_diag() {
 // ---- int 0x80 系统调用入口（ring3 -> ring0）----
 core::arch::global_asm!(
     r#"
+    .section .text
+    .global user_return_point
+user_return_point:
+    ret
+
     .macro PUSHALL
         push rax
         push rcx
@@ -287,9 +302,14 @@ core::arch::global_asm!(
         pop rdx
         pop rsi
         pop rdi
+        cmp byte ptr [rip + USER_EXIT_REQUESTED], 0
+        jne 1f
         pop r11
         pop rcx
         iretq
+    1:
+        mov rsp, [rip + KERNEL_RSP]
+        jmp qword ptr [rip + KERNEL_RET]
 
     .global _exc_ud
     _exc_ud:
@@ -333,30 +353,53 @@ core::arch::global_asm!(
 #[inline(never)]
 pub unsafe extern "C" fn user_demo() {
     unsafe {
+        // 真实 ring3 系统调用：eax=99 触发内核分发，随后由 int80 返回内核
         asm!(
+            "mov eax, 99",
+            "xor edi, edi",
+            "xor esi, esi",
+            "xor edx, edx",
+            "xor r10d, r10d",
+            "xor r8d, r8d",
+            "int 0x80",
             "ud2",
-            "3:",
-            "hlt",
-            "jmp 3b",
             options(nomem, nostack)
         );
     }
 }
 
-/// 把某地址所在 2MB 大页的 U/S 位置 1（使 ring3 可访问）
+/// 把某地址所在页（含上级表项）置 U/S+RW，兼容 1GB/2MB/4KB 映射
 pub unsafe fn make_user_page(addr: u64) {
     let cr3: u64;
     asm!("mov rax, cr3", out("rax") cr3, options(nomem, nostack));
-    let pml4 = cr3 as *const u64;
-    let l4 = ((addr >> 39) & 0x1FF) as usize;
-    let pdp = ((*pml4.add(l4)) & 0x000FFFFFFFFFF000) as *mut u64;
-    let l3 = ((addr >> 30) & 0x1FF) as usize;
-    let pd = ((*pdp.add(l3)) & 0x000FFFFFFFFFF000) as *mut u64;
-    let l2 = ((addr >> 21) & 0x1FF) as usize;
-    let pte = *pd.add(l2);
-    let new_pte = pte | 0x4;
-    *pd.add(l2) = new_pte;
-    asm!("invlpg [{}]", in(reg) addr, options(nostack));
+    let pml4 = (cr3 & !0xFFF) as *mut u64;
+    let i4 = ((addr >> 39) & 0x1FF) as usize;
+    let e4 = *pml4.add(i4);
+    *pml4.add(i4) = e4 | 0x6;
+
+    let pdpt = (e4 & 0x000F_FFFF_FFFF_F000) as *mut u64;
+    let i3 = ((addr >> 30) & 0x1FF) as usize;
+    let e3 = *pdpt.add(i3);
+    if e3 & 0x80 != 0 { // 1GB page
+        *pdpt.add(i3) = e3 | 0x6;
+        asm!("invlpg [{}]", in(reg) addr & !0xFFF, options(nostack));
+        return;
+    }
+    *pdpt.add(i3) = e3 | 0x6;
+
+    let pd = (e3 & 0x000F_FFFF_FFFF_F000) as *mut u64;
+    let i2 = ((addr >> 21) & 0x1FF) as usize;
+    let e2 = *pd.add(i2);
+    if e2 & 0x80 != 0 { // 2MB page
+        *pd.add(i2) = e2 | 0x6;
+    } else {
+        *pd.add(i2) = e2 | 0x6;
+        let pt = (e2 & 0x000F_FFFF_FFFF_F000) as *mut u64;
+        let i1 = ((addr >> 12) & 0x1FF) as usize;
+        let e1 = *pt.add(i1);
+        *pt.add(i1) = e1 | 0x6;
+    }
+    asm!("invlpg [{}]", in(reg) addr & !0xFFF, options(nostack));
 }
 
 /// 准备用户态：给用户代码页和用户栈页设 U/S
@@ -369,27 +412,28 @@ pub unsafe fn prepare_user() {
     crate::println!("user pages set to U/S (ring3 accessible)");
 }
 
-/// 从内核切到 ring3 运行 user_demo（iretq）
-pub unsafe fn switch_to_user() -> ! {
-    unsafe extern "C" {
-        static user_stack_top: u8;
-    }
-    let rip = user_demo as u64;
-    let rsp = &raw const user_stack_top as u64;
-    asm!(
-        "push {ss}",
-        "push {rsp}",
-        "push {flags}",
-        "push {cs}",
-        "push {rip}",
+/// 从内核切到 ring3（naked：入口 rsp 即返回地址，桩 ret 可精确回落）
+#[unsafe(naked)]
+pub unsafe extern "C" fn switch_to_user(stack: u64, rip: u64) {
+    core::arch::naked_asm!(
+        "mov [rip + KERNEL_RSP], rsp",
+        "lea rax, [rip + {ret}]",
+        "mov [rip + KERNEL_RET], rax",
+        "push 0x23",
+        "push rdi",
+        "push 0x202",
+        "push 0x1B",
+        "push rsi",
         "iretq",
-        ss = const (UDATA | 3),
-        cs = const (UCODE | 3),
-        rsp = in(reg) rsp,
-        flags = const 0x202u64,
-        rip = in(reg) rip,
-        options(noreturn)
+        ret = sym user_return_point,
     )
+}
+
+/// 进入 ring3 执行一次演示程序
+pub unsafe fn run_user() {
+    unsafe extern "C" { static user_stack_top: u8; }
+    USER_EXIT_REQUESTED.store(false, Ordering::SeqCst);
+    switch_to_user(&raw const user_stack_top as u64, user_demo as u64);
 }
 
 // 用户栈（ring3）

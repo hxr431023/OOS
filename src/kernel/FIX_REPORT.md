@@ -329,3 +329,10 @@ root@hybrid:~#
 - 契约：`system/api/boot.api`、`service.api`、`kernel.api` 片段，含 EVENT/LIMIT_OVERRIDE/ACL_OVERRIDE；尚未进 `api_parser` 的 include_str 列表。
 
 串口实测（改序后）：`[boot] phase 3 microkernel` → `[boot] phase 5 kernel-ext` → 10 条 `[module] builtin ... loaded` → `[boot] phase 6 user-init` → `[svc] manager ready: registered=15 auto_started=12 running=12 containers=3` → `[svc] PASS` → `[boot] phase 7 command-line`。
+
+### 三项补齐（第二轮）
+
+- 契约：`api_parser::CONTRACTS` 4 → 7，新增 `system/api/boot.api`、`service.api`、`kernel.api`，走 `parse_dsl` 分支建对象/条目；串口 `[api] loaded 7 contract(s), 7 object(s), 63 entry(s); dsl=3 json=4 failed=0`。
+- 模块：新增 `ModuleManager::elf_load`（节头表 → ALLOC 节拷贝到 4K 对齐堆映像 → SHT_RELA 重定位 `R_X86_64_64`/`PC32`/`PLT32`/`32`，符号按 `.symtab` 的 `st_shndx`/`st_value` 取址），`load_module` 由固定槽位改为该路径并打印 `relocated=N`。仓库内无 .ko 样本，未实测。
+- Ring3：`switch_to_user` 改为 `#[naked]` + `naked_asm!`（入口 rsp 即返回地址），`make_user_page` 支持 1G/2M/4K 映射并逐级置 U/S|RW，`user_demo` 发 `int 0x80`（eax=99），int80 入口在 `USER_EXIT_REQUESTED` 置位时经 `KERNEL_RSP/KERNEL_RET` 回落内核；新增 `ring3` shell 命令。
+- 实测：开机正常到 `[boot] phase 7 command-line`；`ring3` 命令在 VBox 中触发后仍卡死（无异常打印），未通过验收，已从启动路径移出以免阻塞开机。

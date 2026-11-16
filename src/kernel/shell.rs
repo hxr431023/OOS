@@ -106,7 +106,7 @@ fn exec(cmd: &str) {
                 crate::user::prepare_user();
             }
             crate::println!("switching to ring3 user mode (demo)...");
-            unsafe { crate::user::switch_to_user() };
+            unsafe { crate::user::run_user() };
         }
         "diag" => {
             crate::println!("--- user-mode diag ---");
@@ -131,6 +131,10 @@ fn exec(cmd: &str) {
             for (name, _mod) in m.iter() {
                 crate::println!("  {}", name);
             }
+        }
+        "ring3" => {
+            unsafe { crate::user::run_user(); }
+            crate::println!("[user] ring3 int80 round-trip complete");
         }
         "ipctest" => {
             crate::ipc::selftest();

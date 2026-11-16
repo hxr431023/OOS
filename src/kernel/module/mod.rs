@@ -126,6 +126,96 @@ impl ModuleManager {
         n
     }
 
+
+    /// ELF64 节装载 + 重定位（R_X86_64_64/PC32/PLT32/32）
+    /// 返回 (映像基址, 映像大小, 已应用重定位数)
+    pub fn elf_load(data: &[u8]) -> Result<(u64, usize, usize), SysErr> {
+        let shoff = u64::from_le_bytes(data[40..48].try_into().unwrap()) as usize;
+        let shentsize = u16::from_le_bytes([data[58], data[59]]) as usize;
+        let shnum = u16::from_le_bytes([data[60], data[61]]) as usize;
+        if shoff == 0 || shnum == 0 || shentsize < 64 { return Err(SysErr::EINVAL); }
+        if shoff + shnum * shentsize > data.len() { return Err(SysErr::EINVAL); }
+
+        let sh = |i: usize| -> &[u8] { &data[shoff + i * shentsize .. shoff + i * shentsize + 64] };
+        let mut symtab = 0usize; let mut strtab = 0usize; let mut total = 0usize;
+        for i in 0..shnum {
+            let e = sh(i);
+            let ty = u32::from_le_bytes(e[4..8].try_into().unwrap());
+            let fl = u64::from_le_bytes(e[8..16].try_into().unwrap());
+            let sz = u64::from_le_bytes(e[32..40].try_into().unwrap()) as usize;
+            let addr = u64::from_le_bytes(e[16..24].try_into().unwrap()) as usize;
+            if ty == 2 && fl & 2 != 0 { total = total.max(addr + sz); }
+            if ty == 2 { symtab = i; }
+            if ty == 3 { strtab = i; }
+        }
+        if total == 0 { return Err(SysErr::EINVAL); }
+        total = (total + 0xFFF) & !0xFFF;
+
+        let layout = core::alloc::Layout::from_size_align(total, 0x1000).map_err(|_| SysErr::EINVAL)?;
+        let base = unsafe { alloc::alloc::alloc_zeroed(layout) } as u64;
+        if base == 0 { return Err(SysErr::EINVAL); }
+
+        // 1) 拷贝可分配节
+        for i in 0..shnum {
+            let e = sh(i);
+            let ty = u32::from_le_bytes(e[4..8].try_into().unwrap());
+            let fl = u64::from_le_bytes(e[8..16].try_into().unwrap());
+            let addr = u64::from_le_bytes(e[16..24].try_into().unwrap()) as usize;
+            let off = u64::from_le_bytes(e[24..32].try_into().unwrap()) as usize;
+            let sz = u64::from_le_bytes(e[32..40].try_into().unwrap()) as usize;
+            if ty != 1 || fl & 2 == 0 || sz == 0 { continue; }
+            if off + sz > data.len() || addr + sz > total { continue; }
+            unsafe { core::ptr::copy_nonoverlapping(data[off..off+sz].as_ptr(), (base as *mut u8).add(addr), sz); }
+        }
+
+        // 2) 重定位
+        let syment = 24usize;
+        let sym_off = u64::from_le_bytes(sh(symtab)[24..32].try_into().unwrap()) as usize;
+        let sym_cnt = u64::from_le_bytes(sh(symtab)[32..40].try_into().unwrap()) as usize / syment;
+        let str_off = u64::from_le_bytes(sh(strtab)[24..32].try_into().unwrap()) as usize;
+        let sym_at = |idx: usize| -> (usize, u64) {
+            let o = sym_off + idx * syment;
+            let shndx = u16::from_le_bytes([data[o+6], data[o+7]]) as usize;
+            let val = u64::from_le_bytes(data[o+8..o+16].try_into().unwrap());
+            (shndx, val)
+        };
+        let mut applied = 0usize;
+        for i in 0..shnum {
+            let e = sh(i);
+            let ty = u32::from_le_bytes(e[4..8].try_into().unwrap());
+            if ty != 4 { continue; } // SHT_RELA
+            let off = u64::from_le_bytes(e[24..32].try_into().unwrap()) as usize;
+            let sz = u64::from_le_bytes(e[32..40].try_into().unwrap()) as usize;
+            if off + sz > data.len() { continue; }
+            for k in (0..sz).step_by(24) {
+                let ro = u64::from_le_bytes(data[off+k..off+k+8].try_into().unwrap()) as usize;
+                let info = u64::from_le_bytes(data[off+k+8..off+k+16].try_into().unwrap());
+                let add = i64::from_le_bytes(data[off+k+16..off+k+24].try_into().unwrap());
+                let rtype = (info & 0xFFFF_FFFF) as u32;
+                let symidx = (info >> 32) as usize;
+                let (shndx, val) = sym_at(symidx);
+                // 未定义符号在当前内置符号表里按 0 处理（后续接全局符号解析）
+                let s_addr: u64 = if shndx == 0 { 0 } else { base + val };
+                let place = unsafe { (base as *mut u8).add(ro) } as *mut u8;
+                unsafe {
+                    match rtype {
+                        1 => *(place as *mut u64) = (s_addr as i64).wrapping_add(add) as u64,
+                        2 | 4 => {
+                            let p = place as u64;
+                            let v = (s_addr as i64).wrapping_add(add).wrapping_sub(p as i64);
+                            *(place as *mut i32) = v as i32;
+                        }
+                        10 => *(place as *mut u32) = ((s_addr as i64).wrapping_add(add)) as u32,
+                        _ => {}
+                    }
+                }
+                applied += 1;
+            }
+        }
+        let _ = str_off; let _ = sym_cnt;
+        Ok((base, total, applied))
+    }
+
     /// 加载内核模块（.ko ELF）
     pub fn load_module(&self, name: &str, elf_data: &[u8]) -> Result<(), SysErr> {
         let mut modules = self.modules.lock();
@@ -135,10 +225,9 @@ impl ModuleManager {
 
         // 1. 准入校验 + 按槽位分配内核空间
         let (phoff, phnum) = ModuleManager::verify_elf(elf_data)?;
-        let slot = modules.len() as u64;
-        let base_addr = 0xFFFFFFFFC0000000u64.wrapping_add(slot * 0x200000);
-        let size = elf_data.len();
-        crate::println!("[module] {} elf ok: phoff={} phnum={} base=0x{:x}", name, phoff, phnum, base_addr);
+        let (base_addr, size, relocs) = ModuleManager::elf_load(elf_data)?;
+        crate::println!("[module] {} elf ok: phoff={} phnum={} base=0x{:x} relocated={}",
+            name, phoff, phnum, base_addr, relocs);
         // 实际：解析ELF程序头，映射可加载段，处理重定位
 
         // 2. 解析依赖，查找全局符号表

@@ -109,3 +109,11 @@
 | I7 | 片段契约 | `system/api/{boot,service,kernel}.api` | 已写入，待接入 `api_parser` 加载列表 |
 
 **边界（按用户口径）**：系统应用与图形界面本轮不做；用户态服务当前落在"对象 + 条目 + 状态机 + 打包容器 + 进程对象"层，真实 Ring3 服务二进制与调度执行体为下一步。
+
+## §7 三项补齐状态
+
+| 项 | 实现 | 验证 |
+|---|---|---|
+| `system/api/*.api` 接入 `api_parser` | `CONTRACTS` 扩到 7 项（4 JSON + 3 DSL 片段），DSL 走 `parse_dsl` → 建对象/条目 | 串口 `[api] loaded 7 contract(s), 7 object(s), 63 entry(s); dsl=3 json=4 failed=0` |
+| 模块段映射 + 重定位 | `ModuleManager::elf_load`：节头表解析、ALLOC 节拷贝到堆映像、SHT_RELA 处理 `R_X86_64_64/PC32/PLT32/32`、按符号表取址；`load_module` 改走该路径 | 代码编译通过；仓库内暂无真实 .ko 样本，未做加载实测 |
+| 真实 Ring3 服务执行体 | `switch_to_user` 改 naked（精确保存返回栈）、`run_user`、`user_demo` 执行 `int 0x80`（eax=99）、int80 入口置 `USER_EXIT_REQUESTED` 后回内核、用户页权限支持 1G/2M/4K 三级 | 开机路径不进入 ring3（保留 `ring3` 命令）。VBox 触发实测仍卡死，未达到可用验收，先不阻塞开机 |
