@@ -65,3 +65,16 @@
 - 解析失败路径：`serde_json` 错误会打印 `文件名 + 行号 + 列号 + 原因`，不吞错。
 - 所有条目以占位形式注册（`lib_inst_id = 0`，数据为空），读路径不再返回 100/200。
 - `env = python` 未在 JSON 契约中出现（真实文件无该字段），故无需转换体执行；如后续新增该字段，需按任务书打印不支持提示。
+
+## 7. 最终态（片段 DSL 为准）
+
+- 契约文件已由 JSON 全部转为片段格式：`driver.manager` / `net.socket` / `ui.window` / `vm.instance`。
+- 解析器 `api_parser.rs` 按片段语法实现，ACL 由转换代码语义推导。
+- 串口实际输出：
+```
+[api] loaded 4 contract(s), 4 object(s), 48 entry(s); dsl=4 json=0 failed=0
+[acltest] contract register acl read=false write=true (read must be false)
+[acltest] contract driver_name acl read=true write=false (write must be false)
+```
+- `specs/docs/.api.md` 已按片段修订：删除重复 `internal_loc`、补充读写判定与跨行大括号（用户授权）。
+- JSON 兼容路径保留，仅用于识别历史格式并打印 `(JSON file, spec is DSL fragment)`。
