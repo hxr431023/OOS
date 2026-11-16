@@ -543,7 +543,7 @@ fn exec(cmd: &str) {
         }
         "loadcjk" => {
             // 中文字体位图字体内嵌到内核（规避 VirtualBox 上 ISO9660 目录读取的字节错误）
-            let bytes: &[u8] = include_bytes!("assets/hybrid.cfont");
+            let bytes: &[u8] = include_bytes!("../assets/hybrid.cfont");
             let ok = crate::cjk_render::set_font(bytes);
             crate::println!("loadcjk: embedded font {} B cjk_render={}", bytes.len(), ok);
         }

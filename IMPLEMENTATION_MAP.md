@@ -117,3 +117,25 @@
 | `system/api/*.api` 接入 `api_parser` | `CONTRACTS` 扩到 7 项（4 JSON + 3 DSL 片段），DSL 走 `parse_dsl` → 建对象/条目 | 串口 `[api] loaded 7 contract(s), 7 object(s), 63 entry(s); dsl=3 json=4 failed=0` |
 | 模块段映射 + 重定位 | `ModuleManager::elf_load`：节头表解析、ALLOC 节拷贝到堆映像、SHT_RELA 处理 `R_X86_64_64/PC32/PLT32/32`、按符号表取址；`load_module` 改走该路径 | 代码编译通过；仓库内暂无真实 .ko 样本，未做加载实测 |
 | 真实 Ring3 服务执行体 | `switch_to_user` 改 naked（精确保存返回栈）、`run_user`、`user_demo` 执行 `int 0x80`（eax=99）、int80 入口置 `USER_EXIT_REQUESTED` 后回内核、用户页权限支持 1G/2M/4K 三级 | 开机路径不进入 ring3（保留 `ring3` 命令）。VBox 触发实测仍卡死，未达到可用验收，先不阻塞开机 |
+
+## §8 三层物理拆分（已落地）
+
+| 层 | 目录 | 内容 |
+|---|---|---|
+| 内核（微内核常驻） | `src/kernel/core/` | `memory mm object acl ipc syscall process scheduler user hw log driver boot console vga fb keyboard font* shell glue_layer api_parser sync` |
+| 内核扩展模块 | `src/kernel/aux_modules/` | `module fs vfs net ui gfx vm linux_compat subsys`（netstack 为 Go 参考实现，不入 Rust 构建） |
+| 服务 | `src/kernel/services/` | `service`（服务管理子系统）、`api`（契约桥接）、`user`（用户态服务程序登记） |
+
+`main.rs` 用 `#[path]` 显式指向三层，crate 根不变，`crate::` 引用无需改动；`include_str!/include_bytes!` 已按新目录修正。
+
+### 用户态服务程序登记（services/user）
+
+`services/user/mod.rs` 登记 14 个服务程序的运行计划（名称 / 入口路径 / 栈大小），启动打印：
+
+```
+[svc-user] 14 user service program(s) registered
+```
+
+`spawn(name)` 目前返回“计划 + 未实现”（ring3 装载器待落地），不伪装为已启动。
+
+串口实测（拆分后）：`[boot] phase 3 → [api] 7 契约 → [boot] phase 5 → [svc-user] 14 登记 → [svc] manager ready(15/12/3) → [boot] phase 6 → phase 7`。

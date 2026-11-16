@@ -8,65 +8,58 @@ extern crate alloc;
 
 use core::panic::PanicInfo;
 
-// 底层底座
-mod sync;
-mod boot;
-mod service;
-mod memory;
-mod console;
-mod vga;
-mod font8x8;
-mod fb;
-mod keyboard;
-mod shell;
-// 字体子系统（font.md）：加载器 + 资源映射器 + 字符映射器
-mod font_loader;
-mod font_resmap;
-mod char_mapper;
-mod font;
-mod cjk_render;
+// ===== 三层结构：core（微内核）/ aux_modules（内核扩展）/ services（服务）=====
 
-// 核心业务
-mod object;
-mod acl;
-mod ipc;
-mod glue_layer;
-mod api_parser;
-mod syscall;
-mod vfs;
-// 文件子系统（fs.md）：磁盘文件系统
-mod fs;
+// core：微内核常驻
+#[path = "core/sync.rs"] mod sync;
+#[path = "core/memory.rs"] mod memory;
+#[path = "core/console.rs"] mod console;
+#[path = "core/vga.rs"] mod vga;
+#[path = "core/font8x8.rs"] mod font8x8;
+#[path = "core/fb.rs"] mod fb;
+#[path = "core/keyboard.rs"] mod keyboard;
+#[path = "core/shell.rs"] mod shell;
+#[path = "core/font_loader.rs"] mod font_loader;
+#[path = "core/font_resmap.rs"] mod font_resmap;
+#[path = "core/char_mapper.rs"] mod char_mapper;
+#[path = "core/font/mod.rs"] mod font;
+#[path = "core/cjk_render.rs"] mod cjk_render;
 
-// 内存管理（虚拟内存 + IOMMU）
-mod mm;
+// core：对象与系统调用
+#[path = "core/object/mod.rs"] mod object;
+#[path = "core/acl.rs"] mod acl;
+#[path = "core/ipc.rs"] mod ipc;
+#[path = "core/glue_layer.rs"] mod glue_layer;
+#[path = "core/api_parser.rs"] mod api_parser;
+#[path = "core/syscall.rs"] mod syscall;
 
-// 进程与调度
-mod process;
-#[path = "process/scheduler.rs"]
-mod scheduler;
-mod user;
+// core：内存 / 进程 / 硬件 / 日志 / 驱动
+#[path = "core/mm/mod.rs"] mod mm;
+#[path = "core/process/mod.rs"] mod process;
+#[path = "core/process/scheduler.rs"] mod scheduler;
+#[path = "core/user.rs"] mod user;
+#[path = "core/hw/mod.rs"] mod hw;
+#[path = "core/log/mod.rs"] mod log;
+#[path = "core/driver/mod.rs"] mod driver_mgr;
 
-// 硬件抽象
-mod hw;
+// core：启动阶段机
+#[path = "core/boot.rs"] mod boot;
 
-// 子系统
-#[path = "api/mod.rs"]
-mod api_bridge;
-#[path = "log/mod.rs"]
-mod log;
-#[path = "driver/mod.rs"]
-mod driver_mgr;
-#[path = "net/mod.rs"]
-mod net;
-#[path = "ui/mod.rs"]
-mod gfx;
-#[path = "vm/mod.rs"]
-mod vm;
-#[path = "linux_compat/mod.rs"]
-mod linux_compat;
-#[path = "module/mod.rs"]
-mod module_mgr;
-mod subsys;
+// aux_modules：内核扩展模块
+#[path = "aux_modules/module/mod.rs"] mod module_mgr;
+#[path = "aux_modules/fs/mod.rs"] mod fs;
+#[path = "aux_modules/net/mod.rs"] mod net;
+#[path = "aux_modules/vfs/mod.rs"] mod vfs;
+#[path = "aux_modules/vm/mod.rs"] mod vm;
+#[path = "aux_modules/ui/mod.rs"] mod gfx;
+#[path = "aux_modules/linux_compat/mod.rs"] mod linux_compat;
+#[path = "aux_modules/subsys/mod.rs"] mod subsys;
+
+
+// services：用户态服务（内核侧服务管理骨架）
+#[path = "services/service/mod.rs"] mod service;
+#[path = "services/api/mod.rs"] mod api_bridge;
+#[path = "services/user/mod.rs"] mod svc_user;
 
 // 启动入口与 syscall 入口的全局汇编（替代 src/asm/*.s，避免依赖独立 nasm）
 core::arch::global_asm!(
@@ -294,6 +287,7 @@ unsafe extern "C" fn _kmain(_uefi_mem_info: *const memory::UefiMemoryMap) {
     println!("[module] built-ins loaded: {}", nmod);
     process::init();
     scheduler::init();
+    svc_user::init();
     service::init();
     boot::advance(boot::P_USER);
 

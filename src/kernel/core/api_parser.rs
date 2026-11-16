@@ -270,23 +270,23 @@ fn infer_acl(code: &str) -> crate::acl::AclMask {
 pub const CONTRACTS: [(&str, &str); 7] = [
     (
         "driver.manager.api",
-        include_str!("../../api_definitions/driver.manager.api"),
+        include_str!("../../../api_definitions/driver.manager.api"),
     ),
     (
         "net.socket.api",
-        include_str!("../../api_definitions/net.socket.api"),
+        include_str!("../../../api_definitions/net.socket.api"),
     ),
     (
         "ui.window.api",
-        include_str!("../../api_definitions/ui.window.api"),
+        include_str!("../../../api_definitions/ui.window.api"),
     ),
     (
         "vm.instance.api",
-        include_str!("../../api_definitions/vm.instance.api"),
+        include_str!("../../../api_definitions/vm.instance.api"),
     ),
-    ("boot.api", include_str!("../../system/api/boot.api")),
-    ("service.api", include_str!("../../system/api/service.api")),
-    ("kernel.api", include_str!("../../system/api/kernel.api")),
+    ("boot.api", include_str!("../../../system/api/boot.api")),
+    ("service.api", include_str!("../../../system/api/service.api")),
+    ("kernel.api", include_str!("../../../system/api/kernel.api")),
 ];
 
 pub struct LoadStats {
